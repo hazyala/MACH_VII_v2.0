@@ -1,33 +1,29 @@
-name:  mach_vii_v2.0_venv  
+name: MACH_VII_v2.0
 channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10  
+  - python=3.10
   - pip
+  # --- [콘다 직접 관리 부품: 충돌 방지용] ---
+  - numpy=1.26.4
+  - packaging>=24.0   
+  - scipy
+  - pybullet
   - pip:
-      # --- [통신 및 서버 프레임워크] ---
-      - fastapi             # 비동기 이벤트 루프 기반의 고성능 웹 프레임워크 (API 서버 구축)
-      - uvicorn             # ASGI(Asynchronous Server Gateway Interface) 표준 서버 엔진
-      - python-socketio     # 리액트 프론트엔드와 저지연(Low Latency) 실시간 양방향 통신 구현
-      - websocket-client   # WebSocket 프로토콜을 통한 실시간 데이터 송수신용 클라이언트 라이브러리
-      
-      # --- [비전 및 수치 연산] ---
-      - numpy<2.0.0         # 다차원 배열 연산 및 선형 대수 처리를 위한 핵심 라이브러리 (버전 호환성 준수)
-      - opencv-python<4.9.0 # 실시간 컴퓨터 비전 처리 및 이미지 입출력 표준 라이브러리
-      - ultralytics>=8.3.0  # YOLOv11 모델의 추론, 학습 및 객체 추적 알고리즘 라이브러리
-      - pyrealsense2>=2.55.0 # Intel RealSense SDK의 파이썬 바인딩 (Depth 및 RGB 스트림 제어)
-      
-      # --- [물리 엔진 및 수학적 모델링] ---
-      - pybullet            # 로봇 역기구학(IK) 계산 및 물리 법칙 기반의 가상 환경 시뮬레이터
-      - scipy               # 고등 수학 연산 라이브러리 (칼만 필터의 상태 공간 모델링 및 GPD 연산 최적화용)
-      
-      # --- [AI 에이전트 및 데이터베이스] ---
-      - langchain<0.2.0     # LLM 에이전트의 추론 루프 및 도구 실행을 관리하는 오케스트레이션 프레임워크
-      - langchain-community<0.2.0 # 외부 LLM(Ollama 등) 및 서드파티 툴과의 연결을 지원하는 확장 모듈
-      - falkordb            # 그래프 데이터베이스와의 연결을 위한 전용 클라이언트 라이브러리
-      
-      # --- [시스템 유틸리티] ---
-      - requests            # 외부 API 호출 및 HTTP 통신을 위한 표준 라이브러리
-      - Pillow              # 이미지 파일의 전처리 및 포맷 변환용 라이브러리
-      - python-dotenv       # 환경 변수(.env) 파일 로드 및 보안 정보 관리 도구
+      # --- [조종석 및 0.2.x 지능] ---
+      - streamlit==1.30.0
+      - opencv-python==4.8.0.76
+      - ultralytics>=8.3.0
+      - pyrealsense2>=2.55.0
+      - langchain==0.2.14
+      - langchain-community==0.2.12
+      - langchain-core==0.2.43
+      - langsmith<0.2.0
+      - requests
+      - Pillow
+      - python-dotenv
+      - fastapi
+      - uvicorn
+      - python-socketio
+      - websocket-client

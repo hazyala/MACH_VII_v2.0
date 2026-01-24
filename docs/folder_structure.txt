@@ -3,7 +3,7 @@
 ├── 📁 docker/              # FalkorDB 구동용 docker-compose.yml
 ├── 📁 core/                # 하드웨어 추상화 레이어 (HAL / 드라이버)
 │   ├── 📄 robot_base.py    # 로봇 제어 공통 인터페이스 규격 (cm, 오른손 좌표계)
-│   ├── 📄 pybullet_robot.py # 가상 로봇 제어 및 기구학 연산
+│   ├── 📄 pybullet_robot.py # 가상 로봇 제어 및 연산
 │   ├── 📄 dofbot_robot.py  # 실물 로봇(DOFBOT) 시리얼 통신 및 제어
 │   ├── 📄 vision_base.py   # 비전 시스템 공통 인터페이스 규격
 │   ├── 📄 pybullet_vision.py # 가상 카메라 영상 및 뎁스 획득
