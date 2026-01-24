@@ -10,6 +10,7 @@ dependencies:
       - fastapi             # 비동기 이벤트 루프 기반의 고성능 웹 프레임워크 (API 서버 구축)
       - uvicorn             # ASGI(Asynchronous Server Gateway Interface) 표준 서버 엔진
       - python-socketio     # 리액트 프론트엔드와 저지연(Low Latency) 실시간 양방향 통신 구현
+      - websocket-client   # WebSocket 프로토콜을 통한 실시간 데이터 송수신용 클라이언트 라이브러리
       
       # --- [비전 및 수치 연산] ---
       - numpy<2.0.0         # 다차원 배열 연산 및 선형 대수 처리를 위한 핵심 라이브러리 (버전 호환성 준수)
