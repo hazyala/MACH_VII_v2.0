@@ -1,67 +1,84 @@
 # brain/modules/vision/vision_bridge.py
 
 import streamlit as st
-# core 및 modules 레이어에서 필요한 기능을 임포트합니다.
-from core.vision_base import VisionBase
-# 추후 구현될 실제 드라이버들입니다.
-# from core.pybullet_vision import PyBulletVision
-# from core.realsense_vision import RealSenseVision
+from shared.config import GlobalConfig, CameraConfig
+from core.pybullet_vision import PybulletVision
+# from core.realsense_vision import RealSenseVision # 실물 드라이버 구현 시 주석 해제
 from brain.modules.vision.yolo_detector import YoloDetector
 
 class VisionBridge:
     """
-    비전 드라이버와 분석 알고리즘을 연결하는 중계 클래스입니다.
-    데이터 획득, 객체 인식, 3D 좌표 변환 과정을 통합 관리합니다.
+    하드웨어 드라이버와 AI 모델을 연결하고, 동기화된 데이터를 바탕으로
+    로봇 베이스 기준의 정밀 좌표를 산출하는 통합 관리 클래스입니다.
     """
     def __init__(self):
-        self.sim_mode = st.session_state.get("sim_mode", True)
-        # 현재 환경에 적합한 비전 드라이버를 초기화합니다.
-        self.driver = self._init_driver()
-        # YOLOv11 엔진을 초기화합니다.
+        # 1. 시스템 설정에서 시뮬레이션 모드 여부를 확인합니다.
+        self.sim_mode = st.session_state.get("sim_mode", GlobalConfig.SIM_MODE)
+
+        # 2. 모드에 따라 적절한 드라이버와 카메라 오프셋을 설정합니다.
+        if self.sim_mode:
+            self.driver = PybulletVision()
+            self.offset = CameraConfig.SIM_OFFSET
+        else:
+            # self.driver = RealSenseVision()
+            self.offset = CameraConfig.REAL_OFFSET
+
+        # 3. 객체 탐지를 위한 YOLOv11 엔진을 초기화합니다.
         self.yolo = YoloDetector()
 
-    def _init_driver(self) -> VisionBase:
-        """시스템 모드에 따라 가상 또는 실물 카메라 드라이버를 반환합니다."""
-        if self.sim_mode:
-            # return PyBulletVision()
+    def get_raw_frame(self):
+        """
+        VLM 분석을 위해 처리되지 않은 원본 영상 데이터를 반환합니다.
+        동기화 패키지에서 컬러 영상만 추출하여 제공합니다.
+        """
+        packet = self.driver.get_synced_packet()
+        if not packet:
             return None
-        else:
-            # return RealSenseVision()
-            return None
+        return packet.get("color")
 
     def get_refined_detections(self):
         """
-        영상 획득부터 좌표 정제까지의 전 과정을 수행하여 최종 결과를 반환합니다.
+        동기화된 영상과 포즈 데이터를 사용하여 물체를 탐지하고,
+        카메라 오프셋을 적용한 로봇 베이스 기준의 cm 좌표를 반환합니다.
         """
-        if not self.driver:
+        # 1. 영상, 깊이, 로봇 포즈가 한 세트로 묶인 동기화 패키지를 획득합니다.
+        packet = self.driver.get_synced_packet()
+        if not packet:
             return []
 
-        # 1. 카메라로부터 RGB 영상과 Depth 데이터를 동기화하여 가져옵니다.
-        # frame_data 형식: {"color": numpy_array, "depth": numpy_array}
-        frame_data = self.driver.get_frame()
-        if frame_data is None:
-            return []
+        color_frame = packet["color"]
+        depth_frame = packet["depth"]
+        # 영상이 촬영된 시점의 로봇 위치 정보입니다.
+        captured_pose = packet["captured_pose"]
 
-        # 2. YOLO 엔진을 사용하여 2D 픽셀 좌표와 객체 명칭을 추출합니다.
-        raw_detections = self.yolo.detect(frame_data["color"])
+        # 2. YOLO 엔진을 사용하여 영상 내 객체의 2D 픽셀 좌표를 탐지합니다.
+        raw_detections = self.yolo.detect(color_frame)
         
-        refined_results = []
+        refined_list = []
         for det in raw_detections:
-            # 3. 픽셀 좌표와 Depth 값을 이용하여 3D cm 좌표로 변환합니다.
-            # 이 과정에서 VisionBase 내부에 정의된 칼만 필터가 자동으로 적용됩니다.
-            u, v = det["pixel_center"] # 객체 중심점 픽셀
-            depth_val = frame_data["depth"][v, u] # 해당 지점의 깊이 값
+            u, v = det["pixel_center"]
             
-            coords_cm = self.driver.pixel_to_cm(u, v, depth_val)
+            # 3. 해당 픽셀의 깊이 정보(m)를 가져와 카메라 기준 3D cm 좌표로 변환합니다.
+            depth_val = depth_frame[v, u]
+            cam_coords = self.driver.pixel_to_cm(u, v, depth_val)
             
-            if coords_cm:
-                refined_results.append({
+            if cam_coords:
+                # 4. [핵심] 카메라 오프셋을 적용하여 로봇 베이스 기준 좌표를 산출합니다.
+                # 고정 카메라 설정(SIM_OFFSET)에 따라 절대 좌표계로 변환됩니다.
+                robot_x = cam_coords[0] + self.offset["x"]
+                robot_y = cam_coords[1] + self.offset["y"]
+                robot_z = cam_coords[2] + self.offset["z"]
+                
+                # 5. 탐지 결과와 함께 당시 로봇의 위치(Sync Pose)를 패키징하여 반환합니다.
+                # 이를 통해 좌뇌(LLM)가 현재 위치와 목표 위치를 정확히 대조할 수 있습니다.
+                refined_list.append({
                     "name": det["name"],
                     "position": {
-                        "x": coords_cm[0],
-                        "y": coords_cm[1],
-                        "z": coords_cm[2]
-                    }
+                        "x": round(robot_x, 2),
+                        "y": round(robot_y, 2),
+                        "z": round(robot_z, 2)
+                    },
+                    "sync_pose": captured_pose # 비주얼 서보잉을 위한 동기화 포즈 포함
                 })
                 
-        return refined_results
+        return refined_list

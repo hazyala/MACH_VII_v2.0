@@ -12,7 +12,7 @@
 │   ├── 📄 logic_brain.py   # 좌뇌: 업무 수행 및 도구 호출 (Gemma3)
 │   ├── 📄 emotion_brain.py # 우뇌: 감정 상태 분석 및 표정 결정 (Gemma3)
 │   ├── 📁 tools/           # [LLM 이 직접 수행하는 도구]
-│   |   ├── 📁 common/      # 공통 도구 (단위 변환기, 로거)
+│   |   ├── 📁 common/      # 공통 도구 (단위 변환기 등)
 │   |   |   ├──📄robot_action.py # 로봇 움직임 수행 도구
 │   |   ├── 📁 vision/      # 시각 지능 
 │   |   |   ├──📄vision_detect.py # LLM이 호출하는 통합 비전 도구
@@ -26,6 +26,8 @@
 │   |   |   ├──📄 gpd_manager.py #포인트 클라우드를 활용한 GPD(Grasp Pose Detection) 
 │   |   |   ├──📄 vision_bridge.py # 시뮬레이션/실물 중계자 
 │   |   ├── 📁 robot/
+│   |   |   ├──📄 robot_factory # 시뮬레이션/실물 중계자
+│   |   |   ├──📄 motion_controllor # 세부 움직임 로직
 ├── 📁 interface/           # 사용자 연결 및 통신 레이어
 │   ├── 📁 backend/         # FastAPI 서버 (비동기 전령 및 데이터 중계)
 │       |   ├──📄 pybullet_client.py #파이불렛 서버 연동 클라이언트
