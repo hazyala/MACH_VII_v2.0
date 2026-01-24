@@ -11,14 +11,21 @@
 ├── 📁 brain/               # AI 에이전트 및 사고 레이어
 │   ├── 📄 logic_brain.py   # 좌뇌: 업무 수행 및 도구 호출 (Gemma3)
 │   ├── 📄 emotion_brain.py # 우뇌: 감정 상태 분석 및 표정 결정 (Gemma3)
-│   └── 📁 tools/           # [핵심 도구]
-│       ├── 📁 common/      # 공통 도구 (단위 변환기, 로거)
-│       ├── 📁 vision/      # 시각 지능 (YOLOv11, VLM 분석, GPD 알고리즘)
-│       |   ├──📄 yolo_detector.py # YOLOv11s.pt 욜로 객체 인식 알고리즘
-│       |   ├──📄 gpd_manager.py #포인트 클라우드를 활용한 GPD(Grasp Pose Detection)
-│       ├── 📁 pybullet/    # 시뮬레이션 환경 보조 도구
-│       ├── 📁 dofbot/      # 실물 로봇 환경 보조 도구
-│       └── 📁 memory/      # FalkorDB 연동 (추억 저장 및 검색)
+│   ├── 📁 tools/           # [LLM 이 직접 수행하는 도구]
+│   |   ├── 📁 common/      # 공통 도구 (단위 변환기, 로거)
+│   |   |   ├──📄robot_action.py # 로봇 움직임 수행 도구
+│   |   ├── 📁 vision/      # 시각 지능 
+│   |   |   ├──📄vision_detect.py # LLM이 호출하는 통합 비전 도구
+│   |   |   ├──📄vision_analyze.py # VLM 분석 도구
+│   |   ├── 📁 pybullet/    # 시뮬레이션 환경 보조 도구
+│   |   ├── 📁 dofbot/      # 실물 로봇 환경 보조 도구
+│   |   └── 📁 memory/      # FalkorDB 연동 (추억 저장 및 검색)
+│   └── 📁 modules/         # [logic 수행 모듈]
+│   |   ├── 📁 vision/ vision 수행에 필요한 로직 (YOLOv11, VLM 분석, GPD 알고리즘)
+│   |   |   ├──📄 yolo_detector.py # YOLOv11s.pt 욜로 객체 인식 알고리즘
+│   |   |   ├──📄 gpd_manager.py #포인트 클라우드를 활용한 GPD(Grasp Pose Detection) 
+│   |   |   ├──📄 vision_bridge.py # 시뮬레이션/실물 중계자 
+│   |   ├── 📁 robot/
 ├── 📁 interface/           # 사용자 연결 및 통신 레이어
 │   ├── 📁 backend/         # FastAPI 서버 (비동기 전령 및 데이터 중계)
 │       |   ├──📄 pybullet_client.py #파이불렛 서버 연동 클라이언트
@@ -28,6 +35,6 @@
 │   ├── 📄 filters.py       # 칼만 필터(Kalman Filter) 등 데이터 정제 알고리즘
 │   └── 📄 network.py       # 웹소켓(Websocket) 통신 규약 및 전송 모델
 ├── 📁 data/                # YOLO Weights, 이미지/표정 에셋
-├── 📄 main.py              # 통합 실행 및 시스템 통합 사령부
+├── 📄 main.py              # 통합 실행 및 시스템 총괄
 ├── 📄 environment.yml      # v2.0 통합 가상환경(venv) 설계도
 └── 📄 .env.example         # 환경 변수 및 보안 설정 견본
