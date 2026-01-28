@@ -17,7 +17,7 @@ function App() {
   }, []);
 
   return (
-    <div className="h-screen w-screen p-6 box-border font-sans selection:bg-blue-100">
+    <div className="h-screen w-screen p-6 box-border font-sans selection:bg-blue-100 bg-[#FBFBFD]">
       <div className="grid grid-cols-[28%_30%_42%] gap-6 h-full w-full">
 
         {/* Left Column: Perception */}

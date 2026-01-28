@@ -3,31 +3,35 @@ import useAppStore from '../store';
 import { Send, Cpu } from 'lucide-react';
 
 const ChatPanel = () => {
-    // We could pull logs from store if available, for now using dummy + simple interactive chat
-    const [messages, setMessages] = useState([
-        { id: 1, role: 'bot', text: '공주마마, 맹칠이 대령했사옵니다. 원하시는 대로 대궐의 배치를 다시 하였사옵니다.' },
-        { id: 2, role: 'user', text: '그래, 중앙을 좀 줄이고 채팅창을 넓게 하니까 훨씬 시원해 보여.' },
-        { id: 3, role: 'bot', text: '혜안이 무궁하시옵니다! 이제 마마와 더 많은 서신을 주고받아도 화면이 부족할 일은 없겠사옵니다.' },
-        { id: 4, role: 'bot', text: '기억 저장소(FalkorDB)도 이 넓은 대화 내용을 꼼꼼히 기록하고 있사오니 안심하시옵소서.' },
-    ]);
+    // Subscribe to chat history from global store
+    const chatHistory = useAppStore((state) => state.brain.chat_history || []);
+
+    // Local state only for input
     const [input, setInput] = useState('');
     const messagesEndRef = useRef(null);
 
+    // Scroll to bottom
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
-    useEffect(scrollToBottom, [messages]);
 
-    const handleSend = () => {
+    useEffect(() => {
+        scrollToBottom();
+    }, [chatHistory]);
+
+    const handleSend = async () => {
         if (!input.trim()) return;
-        const newMsg = { id: Date.now(), role: 'user', text: input };
-        setMessages(prev => [...prev, newMsg]);
-        setInput('');
 
-        // Dummy Reply for now (Later connect to backend)
-        setTimeout(() => {
-            setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: '명 받들겠사옵니다. (시스템 연결 필요)' }]);
-        }, 1000);
+        try {
+            // Optimistic update (backend will echo back via store)
+            // But we trust backend to be source of truth.
+            await fetch(`http://localhost:8000/api/command?command=${encodeURIComponent(input)}`, {
+                method: 'POST'
+            });
+            setInput('');
+        } catch (e) {
+            console.error(e);
+        }
     };
 
     return (
@@ -41,9 +45,14 @@ const ChatPanel = () => {
 
             {/* Chat History */}
             <div className="flex-1 overflow-y-auto pr-2 space-y-4 font-sans mb-4">
-                {messages.map((msg) => (
+                {chatHistory.length === 0 && (
+                    <div className="text-center text-gray-400 text-sm mt-10">
+                        대화 내역이 없습니다. (시스템 연결 대기중...)
+                    </div>
+                )}
+                {chatHistory.map((msg, idx) => (
                     <div
-                        key={msg.id}
+                        key={idx}
                         className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                         <div

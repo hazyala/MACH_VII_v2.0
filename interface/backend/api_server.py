@@ -1,4 +1,5 @@
 from fastapi import FastAPI, WebSocket, BackgroundTasks, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import json
@@ -14,6 +15,7 @@ from brain.logic_brain import logic_brain
 from expression.emotion_controller import emotion_controller
 from brain.emotion_updater import llm_updater
 from sensor.realsense_driver import realsense_driver
+from interface.backend.pybullet_client import pybullet_client
 from memory.falkordb_manager import memory_manager
 
 app = FastAPI()
@@ -95,6 +97,43 @@ async def post_command(command: str, background_tasks: BackgroundTasks):
 async def update_context(allow_explore: bool, risk_level: str):
     logic_brain.set_context(allow_explore, risk_level)
     return {"status": "updated", "context": {"allow_explore": allow_explore, "risk_level": risk_level}}
+
+# Video Streaming Endpoints
+@app.get("/video/rgb")
+def video_rgb(source: str = None):
+    # Driver now handles PyBullet fetching + YOLO internally
+    return StreamingResponse(realsense_driver.generate_rgb_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.get("/video/depth")
+def video_depth():
+    # Only RealSense supports depth stream currently in this architecture
+    # PyBullet provides raw depth but we might need to visualizing it if requested
+    # For now, return existing stream (which handles Mock/Real)
+    return StreamingResponse(realsense_driver.generate_depth_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+    return {"status": "updated", "context": {"allow_explore": allow_explore, "risk_level": risk_level}}
+
+# Configuration Endpoint
+@app.post("/api/config")
+async def update_config(camera_source: str = None, robot_target: str = None, logic_mode: str = None):
+    # Handle Camera Switch
+    if camera_source:
+        realsense_driver.set_source(camera_source)
+        if camera_source == "PyBullet":
+             pybullet_client.connect()
+    
+    # Handle Logic/Robot (Placeholder for logic brain update)
+    # if logic_mode:
+    #     logic_brain.set_mode(logic_mode)
+    
+    return {
+        "status": "config_updated", 
+        "config": {
+            "camera": camera_source, 
+            "robot": robot_target, 
+            "logic": logic_mode
+        }
+    }
 
 if __name__ == "__main__":
     import uvicorn

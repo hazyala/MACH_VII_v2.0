@@ -18,13 +18,14 @@ const SensorPanel = () => {
                     LIVE RGB
                 </div>
                 {/* Placeholder for Video Feed */}
-                <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                <div className="w-full h-full flex items-center justify-center bg-black">
                     <img
-                        src="https://picsum.photos/id/1/600/400"
+                        src="http://localhost:8000/video/rgb"
                         alt="RGB Feed"
-                        className="w-full h-full object-cover opacity-80"
+                        className="w-full h-full object-cover opacity-90"
+                        onError={(e) => { e.target.style.display = 'none' }}
                     />
-                    {/* If real stream available: <canvas ref={rgbRef} ... /> */}
+                    {/* Fallback if stream fails (handled by hiding, maybe show text 'NO SIGNAL') */}
                 </div>
             </div>
 
@@ -34,20 +35,20 @@ const SensorPanel = () => {
                         text-[10px] font-bold text-[#1D1D1F] backdrop-blur-sm z-10">
                     DEPTH MAP
                 </div>
-                <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                <div className="w-full h-full flex items-center justify-center bg-black">
                     <img
-                        src="https://picsum.photos/id/10/600/400?grayscale"
+                        src="http://localhost:8000/video/depth"
                         alt="Depth Feed"
-                        className="w-full h-full object-cover opacity-50"
+                        className="w-full h-full object-cover opacity-80"
+                        onError={(e) => { e.target.style.display = 'none' }}
                     />
                 </div>
-
                 {/* Sensor Stats Overlay */}
                 <div className="absolute bottom-4 left-4 right-4 flex gap-2">
-                    <div className="bg-black/10 backdrop-blur-md px-3 py-1 rounded-lg text-[10px] text-gray-600 font-mono">
+                    <div className="bg-white/80 backdrop-blur-md px-3 py-1 rounded-lg text-[10px] text-gray-800 font-mono shadow-sm">
                         OBJ: {perception.obstacle_distance_cm}cm
                     </div>
-                    <div className="bg-black/10 backdrop-blur-md px-3 py-1 rounded-lg text-[10px] text-gray-600 font-mono">
+                    <div className="bg-white/80 backdrop-blur-md px-3 py-1 rounded-lg text-[10px] text-gray-800 font-mono shadow-sm">
                         RISK: {perception.risk_level}
                     </div>
                 </div>

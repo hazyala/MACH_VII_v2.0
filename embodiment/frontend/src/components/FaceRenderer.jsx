@@ -1,28 +1,66 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import useAppStore from '../store';
+import { ExpressionEngine } from '../logic/ExpressionEngine';
 
-const FaceRenderer = ({ expression }) => {
-    // Note: expression is "safeExpr" (normalized) from parent or needs normalization here?
-    // CenterPanel passes raw engine output. engine output has standard structure.
+const FaceRenderer = ({ size = 140 }) => {
+    const emotion = useAppStore((state) => state.emotion);
 
-    const safeExpr = expression || {};
-    // Engine structure: { leftEye: {openness}, rightEye: {openness}, happiness, etc. }
-    // Or { eye: {openness...} } ? 
-    // Check ExpressionEngine.js logic to be sure. 
-    // Actually in previous step App.jsx used: engineRef.current.current which has { leftEye:..., rightEye:..., happiness... } usually if it's based on previous context.
-    // BUT the previous FileRenderer code used { eye: {openness...}, mouth: ... }
-    // Let's assume the Engine produces flattened or structured data.
-    // To be safe, I'll support both or check the keys.
-    // Looking at CenterPanel.jsx -> engineRef.current.update() returns object.
-    // Let's implement a generic renderer that maps these.
+    // Internal Engine
+    const engineRef = useRef(new ExpressionEngine());
 
-    // Default values if missing
-    const leftOpen = (safeExpr.leftEye?.openness ?? safeExpr.eye?.openness ?? 1.0);
-    const rightOpen = (safeExpr.rightEye?.openness ?? safeExpr.eye?.openness ?? 1.0);
-    const happiness = (safeExpr.happiness ?? safeExpr.mouth?.smile ?? 0.0);
-    const roll = (safeExpr.head?.roll ?? 0.0);
+    // DOM Refs for Direct Manipulation
+    const leftEyeRef = useRef(null);
+    const rightEyeRef = useRef(null);
+    const mouthRef = useRef(null);
+    const faceGroupRef = useRef(null); // For Head Roll
 
-    // Colors
-    const faceColor = "#1D1D1F"; // Dark Gray/Black for features
+    // Sync Emotion Store -> Engine Target
+    useEffect(() => {
+        engineRef.current.updateTargetFromEmotion(emotion);
+    }, [emotion]);
+
+    // Animation Loop (60fps, No React Render)
+    useEffect(() => {
+        let frameId;
+        let lastTime = performance.now();
+
+        const loop = (now) => {
+            const dt = (now - lastTime) / 1000;
+            lastTime = now;
+
+            // 1. Update Physics/Interpolation
+            const curr = engineRef.current.update(dt, false); // isManual=false
+
+            // 2. Direct DOM Updates
+            // Eye Openness (Scale Y)
+            const leftOpen = curr.leftEye?.openness ?? 1.0;
+            const rightOpen = curr.rightEye?.openness ?? 1.0;
+            if (leftEyeRef.current) leftEyeRef.current.setAttribute('ry', 15 * leftOpen);
+            if (rightEyeRef.current) rightEyeRef.current.setAttribute('ry', 15 * rightOpen);
+
+            // Head Roll
+            const roll = curr.head?.roll ?? 0.0;
+            if (faceGroupRef.current) {
+                faceGroupRef.current.setAttribute('transform', `rotate(${roll}, 100, 100)`);
+            }
+
+            // Mouth Shape
+            // Simple Quadratic Bezier: M 70 120 Q 100 [ControlY] 130 120
+            // Happiness 0 -> Straight (120), 1 -> Smile (140), -1 -> Frown (100)
+            const happiness = curr.happiness ?? 0.0;
+            const controlY = 120 + (happiness * 20);
+            if (mouthRef.current) {
+                mouthRef.current.setAttribute('d', `M 70 120 Q 100 ${controlY} 130 120`);
+            }
+
+            frameId = requestAnimationFrame(loop);
+        };
+
+        frameId = requestAnimationFrame(loop);
+        return () => cancelAnimationFrame(frameId);
+    }, []);
+
+    const faceColor = "#1D1D1F";
 
     return (
         <div className="w-full h-full flex items-center justify-center">
@@ -32,36 +70,35 @@ const FaceRenderer = ({ expression }) => {
                 viewBox="0 0 200 200"
                 style={{ overflow: 'visible' }}
             >
-                {/* Global Transform */}
-                <g transform={`rotate(${roll}, 100, 100)`}>
+                {/* Global Transform Group */}
+                <g ref={faceGroupRef}>
 
-                    {/* Eyes Group: Centered at 100, 80 */}
-                    {/* Left Eye: -30 from center */}
+                    {/* Left Eye */}
                     <g transform="translate(70, 80)">
                         <ellipse
+                            ref={leftEyeRef}
                             cx="0" cy="0"
-                            rx="12" ry={15 * leftOpen}
+                            rx="12" ry="15"
                             fill={faceColor}
                         />
-                        {/* Highlight */}
                         <circle cx="3" cy="-4" r="3" fill="white" opacity="0.2" />
                     </g>
 
-                    {/* Right Eye: +30 from center */}
+                    {/* Right Eye */}
                     <g transform="translate(130, 80)">
                         <ellipse
+                            ref={rightEyeRef}
                             cx="0" cy="0"
-                            rx="12" ry={15 * rightOpen}
+                            rx="12" ry="15"
                             fill={faceColor}
                         />
                         <circle cx="3" cy="-4" r="3" fill="white" opacity="0.2" />
                     </g>
 
-                    {/* Mouth: Centered at 100, 130 */}
-                    {/* Simpler Smile Path */}
-                    {/* M startX startY Q controlX controlY endX endY */}
+                    {/* Mouth */}
                     <path
-                        d={`M 70 120 Q 100 ${120 + (happiness * 20)} 130 120`}
+                        ref={mouthRef}
+                        d="M 70 120 Q 100 120 130 120"
                         stroke={faceColor}
                         strokeWidth="4"
                         fill="none"
@@ -74,5 +111,4 @@ const FaceRenderer = ({ expression }) => {
     );
 };
 
-// Memoize for performance
 export default React.memo(FaceRenderer);

@@ -23,9 +23,27 @@ class StateBroadcaster:
             "agent_state": "IDLE",     # PLANNING, EXECUTING, RECOVERING, IDLE
             "object_type": "none",     # 컵, 공 등
             "episode_result": "none",  # 성공(success), 실패(failure)
+            "episode_result": "none",  # 성공(success), 실패(failure)
             "robot_status": "ok",      # 정상(ok), 오류(error)
+            "chat_history": [],        # List of {"role": "bot", "text": "..."}
             "timestamp": time.time()
         }
+    
+    def log_chat(self, role: str, text: str):
+        with self._lock:
+            # Add to history (limit 20)
+            msg = {"role": role, "text": text, "timestamp": time.time()}
+            history = self.latest_state.get("chat_history", [])
+            history.append(msg)
+            if len(history) > 20: history = history[-20:]
+            self.latest_state["chat_history"] = history
+            
+            # Also invoke listeners
+            snapshot = self.latest_state.copy()
+        
+        for sub in self.subscribers:
+            try: sub(snapshot)
+            except: pass
     
     def subscribe(self, callback: Callable[[Dict[str, Any]], None]):
         """상태 업데이트를 수신할 콜백 함수를 등록합니다."""

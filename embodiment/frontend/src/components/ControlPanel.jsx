@@ -1,62 +1,74 @@
-import React from 'react';
-import { Play, AlertTriangle, Compass, Shield } from 'lucide-react';
+import React, { useState } from 'react';
+import { Camera, Bot, BrainCircuit } from 'lucide-react';
 
-const ControlPanel = ({ onCommand, isManual, onToggleManual }) => {
-    return (
-        // FORCED VISIBILITY: Fixed position to bypass parent overflow issues
-        <div className="fixed bottom-6 right-6 z-[9999] w-80 bg-gray-800 rounded-xl border border-gray-700 p-4 shadow-2xl ring-2 ring-cyan-500/50">
-            <h3 className="text-gray-400 text-sm font-bold mb-3 uppercase flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" /> Manual Override
-                </span>
-                <span className="text-[10px] font-mono text-gray-500">
-                    STATE: {(!!isManual).toString().toUpperCase()}
-                </span>
-            </h3>
+const ControlPanel = () => {
+    const [config, setConfig] = useState({
+        camera: 'RealSense',
+        robot: 'Dofbot',
+        logic: 'Logic'
+    });
 
-            {/* Manual Toggle (Added for visibility) */}
-            <button
-                onClick={onToggleManual}
-                className={`w-full py-3 rounded-lg text-sm font-black transition-all mb-4 flex items-center justify-center gap-2 border shadow-lg ${isManual
-                    ? 'bg-yellow-500 hover:bg-yellow-400 text-black border-yellow-300 ring-2 ring-yellow-500/50'
-                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300 border-gray-600'
-                    }`}
-            >
-                {/* Removed Icon to prevent potential crash if import fails */}
-                {isManual ? '⚠️ MANUAL OVERRIDE: ON' : '⚙️ ENABLE MANUAL CONTROL'}
-            </button>
+    const handleConfigChange = async (type, value) => {
+        setConfig(prev => ({ ...prev, [type]: value }));
+        try {
+            // Build payload
+            let query = `?`;
+            if (type === 'camera') query += `camera_source=${value}`;
+            if (type === 'robot') query += `robot_target=${value}`;
+            if (type === 'logic') query += `logic_mode=${value}`;
 
-            <div className="grid grid-cols-2 gap-3">
-                <button
-                    onClick={() => onCommand('task_start')}
-                    className="flex items-center justify-center gap-2 bg-cyan-900/40 hover:bg-cyan-800/60 border border-cyan-800/50 text-cyan-200 p-3 rounded-lg transition-all active:scale-95"
-                >
-                    <Play className="w-4 h-4" /> Start
-                </button>
+            await fetch(`http://localhost:8000/api/config${query}`, { method: 'POST' });
+        } catch (e) { console.error("Config Error", e); }
+    };
 
-                <button
-                    onClick={() => onCommand('task_fail')}
-                    className="flex items-center justify-center gap-2 bg-red-900/40 hover:bg-red-800/60 border border-red-800/50 text-red-200 p-3 rounded-lg transition-all active:scale-95"
-                >
-                    <AlertTriangle className="w-4 h-4" /> Fail
-                </button>
-
-                <button
-                    onClick={() => onCommand('explore')}
-                    className="flex items-center justify-center gap-2 bg-purple-900/40 hover:bg-purple-800/60 border border-purple-800/50 text-purple-200 p-3 rounded-lg transition-all active:scale-95"
-                >
-                    <Compass className="w-4 h-4" /> Explore
-                </button>
-
-                <button
-                    onClick={() => onCommand('safe')}
-                    className="flex items-center justify-center gap-2 bg-green-900/40 hover:bg-green-800/60 border border-green-800/50 text-green-200 p-3 rounded-lg transition-all active:scale-95"
-                >
-                    <Shield className="w-4 h-4" /> Safe
-                </button>
+    const Section = ({ title, icon: Icon, options, current, type }) => (
+        <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2 text-[11px] font-bold text-[#86868B] uppercase tracking-wider">
+                <Icon size={12} /> {title}
             </div>
+            <div className="flex bg-[#F2F2F7] p-1 rounded-[14px]">
+                {options.map(opt => (
+                    <button
+                        key={opt}
+                        onClick={() => handleConfigChange(type, opt)}
+                        className={`flex-1 py-2 text-[12px] font-medium rounded-[10px] transition-all
+              ${current === opt
+                                ? 'bg-white text-[#007AFF] shadow-sm font-bold'
+                                : 'text-[#86868B] hover:text-[#1D1D1F]'}`}
+                    >
+                        {opt}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="bg-white rounded-[22px] shadow-[0_4px_20px_rgba(0,0,0,0.05)] p-5 flex-none mb-5">
+            <Section
+                title="Camera Source"
+                icon={Camera}
+                options={['RealSense', 'PyBullet']}
+                current={config.camera}
+                type="camera"
+            />
+            <Section
+                title="Robot Target"
+                icon={Bot}
+                options={['Dofbot', 'PyBullet']}
+                current={config.robot}
+                type="robot"
+            />
+            <Section
+                title="Logic Mode"
+                icon={BrainCircuit}
+                options={['Memory', 'Logic']}
+                current={config.logic}
+                type="logic"
+            />
         </div>
     );
 };
 
-export default ControlPanel;
+// Memoize to prevent re-renders unless functionality changes (though it uses local state)
+export default React.memo(ControlPanel);

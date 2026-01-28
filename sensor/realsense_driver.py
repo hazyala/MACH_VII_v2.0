@@ -4,6 +4,12 @@ import numpy as np
 import logging
 from typing import Dict, Any
 from shared.state_broadcaster import broadcaster
+import cv2 # OpenCV added for encoding
+from ultralytics import YOLO # YOLOv8
+import torch
+import requests # For fetching PyBullet frames
+import logging
+
 
 # 1. 전역 상수 선언 (안전)
 RS_AVAILABLE = False
@@ -42,8 +48,13 @@ class RealSenseDriver:
         self.latest_state = {
             "obstacle_distance_cm": 0.0,
             "human_detected": False,
-            "risk_level": "SAFE"
+            "risk_level": "SAFE",
+            "active_source": "RealSense"
         }
+        self.target_source = "RealSense" # RealSense, PyBullet, WebCam
+        self.latest_color_jpeg = None
+        self.latest_depth_jpeg = None
+        self.frame_lock = threading.Lock() # Lock for frame access
         self.pipeline = None
         self.config = None
         
@@ -59,6 +70,14 @@ class RealSenseDriver:
 
             self.running = True
             
+            # YOLO Load (Lazy)
+            try:
+                self.yolo_model = YOLO("yolov8n.pt") # Nano model for speed
+                logging.info("[RealSense] YOLOv8 Model Loaded")
+            except Exception as e:
+                logging.error(f"[RealSense] YOLO Load Failed: {e}")
+                self.yolo_model = None
+
             # 하드웨어 설정 (지연 초기화 Lazy Init)
             if RS_AVAILABLE:
                 try:
@@ -109,62 +128,90 @@ class RealSenseDriver:
         while self.running:
             start_time = time.time()
             
-            # 모드 결정
-            use_hardware = RS_AVAILABLE and (self.pipeline is not None)
-            
-            if use_hardware:
+            # Unified Frame Capture Logic
+            color_image = None
+            depth_colormap = None
+            center_dist = 0.0
+
+            if self.target_source == "PyBullet":
+                # Fetch from PyBullet Server (Snapshot)
+                try:
+                    # Request the SNAPSHOT endpoint (not stream) to get one frame
+                    resp = requests.get("http://localhost:5000/image", timeout=0.5)
+                    if resp.status_code == 200:
+                        # Decode
+                        arr = np.frombuffer(resp.content, np.uint8)
+                        color_image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                        # PyBullet depth? We can fetch /depth if needed, but let's mock depth or fetch it
+                        # For now, just black depth or fetch if fast enough
+                        depth_colormap = np.zeros((480, 640, 3), dtype=np.uint8)
+                except Exception as e:
+                    # PyBullet connection failed -> Show Error Frame
+                    color_image = np.zeros((480, 640, 3), dtype=np.uint8)
+                    cv2.putText(color_image, "PYBULLET DISCONNECTED", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    depth_colormap = np.zeros((480, 640, 3), dtype=np.uint8)
+
+            elif self.target_source == "RealSense" and RS_AVAILABLE and self.pipeline:
+                # Hardware Capture
                 try:
                     frames = self.pipeline.wait_for_frames(timeout_ms=1000)
                     depth_frame = frames.get_depth_frame()
-                    if depth_frame:
-                        width = depth_frame.get_width()
-                        height = depth_frame.get_height()
-                        
-                        # 3x3 격자 샘플링
-                        grid = []
-                        rows = cols = 3
-                        w_step = width // cols
-                        h_step = height // rows
-                        
-                        center_dist = 0.0
-                        
-                        for r in range(rows):
-                            for c in range(cols):
-                                # 각 셀의 중심점 샘플링
-                                cx = c * w_step + w_step // 2
-                                cy = r * h_step + h_step // 2
-                                d = depth_frame.get_distance(cx, cy)
-                                grid.append(float(d * 100)) # cm 단위 변환
-                                
-                                # 중앙 셀(인덱스 4)을 주 거리로 사용
-                                if r == 1 and c == 1:
-                                    center_dist = d * 100
+                    color_frame = frames.get_color_frame()
+                    if depth_frame and color_frame:
+                         depth_image = np.asanyarray(depth_frame.get_data())
+                         color_image = np.asanyarray(color_frame.get_data())
+                         
+                         width = depth_frame.get_width()
+                         height = depth_frame.get_height()
+                         # Center Dist Logic
+                         center_dist = depth_frame.get_distance(width // 2, height // 2) * 100
+                         
+                         depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+                except:
+                     pass
+            
+            # If no frame (Mock or Error)
+            if color_image is None:
+                # Mock Generation
+                 color_image = np.zeros((480, 640, 3), dtype=np.uint8)
+                 cv2.putText(color_image, f"[MOCK] Source: {self.target_source}", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                 depth_colormap = np.zeros((480, 640, 3), dtype=np.uint8)
 
-                        self._update_perception(center_dist, grid, mode="REAL")
-                except RuntimeError as e:
-                    logging.warning(f"[RealSense] 런타임 오류 (타임아웃?): {e}")
-                except Exception as e:
-                    logging.error(f"[RealSense] 예상치 못한 오류: {e}")
-            else:
-                # Mock(모의) 데이터
-                # 격자를 지나가는 움직이는 물체 시뮬레이션
-                t = time.time()
-                mock_grid = [100.0] * 9
-                
-                # 움직이는 파동(Wave)
-                wave_idx = int(t * 2) % 9
-                mock_grid[wave_idx] = 20.0 # 가까운 물체
-                
-                sim_dist = mock_grid[4] # 중앙
-                self._update_perception(sim_dist, mock_grid, mode="MOCK")
-                time.sleep(1.0 / self.fps)
+            # --- Common Processing (YOLO) ---
+            if self.yolo_model and color_image is not None:
+                results = self.yolo_model(color_image, verbose=False)
+                for result in results:
+                    boxes = result.boxes
+                    for box in boxes:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        conf = float(box.conf[0])
+                        cls = int(box.cls[0])
+                        label = f"{self.yolo_model.names[cls]} {conf:.2f}"
+                        # Draw
+                        cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        cv2.putText(color_image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-            # 속도 조절 (Throttle)
+            # Encode
+            ret, c_jpg = cv2.imencode('.jpg', color_image, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+            ret2, d_jpg = cv2.imencode('.jpg', depth_colormap, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
+
+            with self.frame_lock:
+                if ret: self.latest_color_jpeg = c_jpg.tobytes()
+                if ret2: self.latest_depth_jpeg = d_jpg.tobytes()
+            
+            # Update Perception State
+            self._update_perception(center_dist, [], mode=self.target_source)
+
+            # Throttle
             dt = time.time() - start_time
             sleep_time = max(0, (1.0 / self.fps) - dt)
             time.sleep(sleep_time)
-        
+
         logging.info("[RealSense] 루프 종료됨.")
+
+    def set_source(self, source_name):
+        logging.info(f"[RealSense] Source switched to {source_name}")
+        self.target_source = source_name
 
     def _update_perception(self, distance_cm: float, grid: list = None, mode: str = "UNKNOWN"):
         risk = "SAFE"
@@ -190,6 +237,24 @@ class RealSenseDriver:
 
     def get_state(self) -> Dict[str, Any]:
         return self.latest_state
+        
+    def generate_rgb_stream(self):
+        while True:
+            with self.frame_lock:
+                frame = self.latest_color_jpeg
+            if frame:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            time.sleep(0.033) # 30fps cap
+            
+    def generate_depth_stream(self):
+        while True:
+            with self.frame_lock:
+                frame = self.latest_depth_jpeg
+            if frame:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            time.sleep(0.033)
 
 # 전역 인스턴스
 realsense_driver = RealSenseDriver()

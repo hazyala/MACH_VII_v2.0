@@ -15,6 +15,9 @@ class LogicBrain:
             "allow_explore": False,
             "risk_level": "LOW"
         }
+        # Initial Greeting
+        broadcaster.log_chat("bot", "MACH-VII 시스템이 준비되었습니다.")
+        broadcaster.log_chat("bot", "명령을 기다리고 있습니다.")
 
     def set_context(self, allow_explore: bool, risk_level: str):
         self.context["allow_explore"] = allow_explore
@@ -22,6 +25,8 @@ class LogicBrain:
         print(f"[LogicBrain] Context Updated: Explore={allow_explore}, Risk={risk_level}")
 
     def execute_task(self, task_command: str):
+        broadcaster.log_chat("user", f"명령 수신: {task_command}")
+        
         episode_id = str(uuid.uuid4())
         start_time = time.time()
         
