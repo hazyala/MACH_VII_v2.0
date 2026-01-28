@@ -49,9 +49,9 @@ class RealSenseDriver:
             "obstacle_distance_cm": 0.0,
             "human_detected": False,
             "risk_level": "SAFE",
-            "active_source": "RealSense"
+            "active_source": "PyBullet"
         }
-        self.target_source = "RealSense" # RealSense, PyBullet, WebCam
+        self.target_source = "PyBullet" # RealSense, PyBullet, WebCam
         self.latest_color_jpeg = None
         self.latest_depth_jpeg = None
         self.frame_lock = threading.Lock() # Lock for frame access
@@ -178,6 +178,7 @@ class RealSenseDriver:
                  depth_colormap = np.zeros((480, 640, 3), dtype=np.uint8)
 
             # --- Common Processing (YOLO) ---
+            detections = []
             if self.yolo_model and color_image is not None:
                 results = self.yolo_model(color_image, verbose=False)
                 for result in results:
@@ -186,7 +187,15 @@ class RealSenseDriver:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         conf = float(box.conf[0])
                         cls = int(box.cls[0])
-                        label = f"{self.yolo_model.names[cls]} {conf:.2f}"
+                        label_name = self.yolo_model.names[cls]
+                        label = f"{label_name} {conf:.2f}"
+                        
+                        detections.append({
+                            "label": label_name,
+                            "confidence": conf,
+                            "bbox": [x1, y1, x2, y2]
+                        })
+
                         # Draw
                         cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
                         cv2.putText(color_image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
@@ -195,12 +204,18 @@ class RealSenseDriver:
             ret, c_jpg = cv2.imencode('.jpg', color_image, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
             ret2, d_jpg = cv2.imencode('.jpg', depth_colormap, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
 
+            # VLM 분석용 Base64 생성 (비용 절감을 위해 필요할 때만 하거나, 여기서 미리 해둠 - 최적화는 추후)
+            import base64
+            b64_image = None
+            if ret:
+                b64_image = base64.b64encode(c_jpg).decode('utf-8')
+
             with self.frame_lock:
                 if ret: self.latest_color_jpeg = c_jpg.tobytes()
                 if ret2: self.latest_depth_jpeg = d_jpg.tobytes()
             
             # Update Perception State
-            self._update_perception(center_dist, [], mode=self.target_source)
+            self._update_perception(center_dist, detections, image_b64=b64_image, mode=self.target_source)
 
             # Throttle
             dt = time.time() - start_time
@@ -213,7 +228,7 @@ class RealSenseDriver:
         logging.info(f"[RealSense] Source switched to {source_name}")
         self.target_source = source_name
 
-    def _update_perception(self, distance_cm: float, grid: list = None, mode: str = "UNKNOWN"):
+    def _update_perception(self, distance_cm: float, detections: list, image_b64: str = None, grid: list = None, mode: str = "UNKNOWN"):
         risk = "SAFE"
         # 로직: 중앙 거리가 30cm 미만이면 -> DANGER
         # 또는 격자 셀 중 하나라도 20cm 미만이면? 일단 단순하게 유지
@@ -228,11 +243,20 @@ class RealSenseDriver:
             "obstacle_distance_cm": float(distance_cm), 
             "depth_grid": grid if grid else [0.0]*9, # 3x3 평탄화됨(Flattened)
             "human_detected": False, 
+            "detection_count": len(detections),
+            "detected_objects": detections, # YOLO 결과 리스트
             "risk_level": str(risk),
             "sensor_mode": str(mode)
         }
         
         self.latest_state = new_state
+        
+        # SystemState Single Source of Truth 업데이트
+        from state.system_state import system_state
+        system_state.perception_data = new_state
+        if image_b64:
+            system_state.last_frame_base64 = image_b64
+            
         broadcaster.publish("perception", new_state)
 
     def get_state(self) -> Dict[str, Any]:

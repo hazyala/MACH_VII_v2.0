@@ -15,6 +15,10 @@ class LLMUpdater:
         self.running = True
         thread = threading.Thread(target=self._loop, daemon=True)
         thread.start()
+
+    def stop(self):
+        self.running = False
+        print("[Emotion-LLM] 업데이터 종료됨.")
         
     def _loop(self):
         print("[Emotion-LLM] 업데이터 시작됨 (Low-rate).")

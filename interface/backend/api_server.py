@@ -37,6 +37,10 @@ async def startup_event():
     emotion_controller.start()  # 고속 보간 (백그라운드 스레드)
     llm_updater.start()         # 저속 목표 추론 (백그라운드 스레드)
     
+    # 로봇 제어기 시작 (상주)
+    from embodiment.robot_controller import robot_controller
+    robot_controller.start()
+    
     # 메모리 연결
     memory_manager.connect()
 
@@ -45,6 +49,9 @@ async def shutdown_event():
     realsense_driver.stop()
     emotion_controller.stop()
     llm_updater.stop()
+    
+    from embodiment.robot_controller import robot_controller
+    robot_controller.stop()
 
 @app.get("/")
 def read_root():

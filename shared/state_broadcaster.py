@@ -44,6 +44,12 @@ class StateBroadcaster:
         for sub in self.subscribers:
             try: sub(snapshot)
             except: pass
+
+    def log_thought(self, text: str):
+        """에이전트의 사고(Thought)를 기록합니다. UI에서는 챗 로그와 구분하여 표시할 수 있습니다."""
+        # 현재는 챗 로그에 [사고] 태그로 넣어 같이 보여주거나 별도 리스트 관리
+        # 1차적으로는 챗 로그에 포함시키되 role='system' or 'thought'
+        self.log_chat("thought", text)
     
     def subscribe(self, callback: Callable[[Dict[str, Any]], None]):
         """상태 업데이트를 수신할 콜백 함수를 등록합니다."""
@@ -52,6 +58,10 @@ class StateBroadcaster:
             
     def publish(self, key: str, value: Any):
         """특정 상태 키를 업데이트하고 구독자들에게 알립니다."""
+        # Special handling for thoughts to log them
+        if key == "agent_thought":
+             self.log_thought(str(value))
+
         with self._lock:
             self.latest_state[key] = value
             self.latest_state["timestamp"] = time.time()

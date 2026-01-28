@@ -21,6 +21,9 @@ class SystemState:
     # 센서 데이터 (Raw Data가 아닌 가공된 정보)
     perception_data: Dict[str, Any] = field(default_factory=dict)
     
+    # VLM 분석을 위한 최신 프레임 (Base64 Encoded JPEG)
+    last_frame_base64: Optional[str] = None
+    
     # 현재 활성화된 Intent (Brain이 결정한 의도)
     current_intent: str = "IDLE"
     

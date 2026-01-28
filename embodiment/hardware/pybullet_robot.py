@@ -1,7 +1,7 @@
 # core/pybullet_robot.py
 
-import requests
 from embodiment.hardware.robot_base import RobotBase
+from interface.backend.pybullet_client import pybullet_client
 
 class PybulletRobot(RobotBase):
     """
@@ -16,17 +16,11 @@ class PybulletRobot(RobotBase):
         cm 단위 좌표를 받아 서버에 이동 명령을 보냅니다.
         """
         try:
-            # 시뮬레이터 규격에 맞춰 cm를 m로 변환합니다 (100cm = 1m).
+            # cm를 m로 변환하여 전송
             pos_m = [x / 100.0, y / 100.0, z / 100.0]
-            payload = {"pos": pos_m, "speed": speed}
-            
-            response = requests.post(f"{self.server_url}/set_pos", json=payload, timeout=2.0)
-            
-            if response.status_code == 200:
-                # 내부 상태 정보에 현재 목표 위치를 저장합니다.
-                self.current_state["position"] = {"x": x, "y": y, "z": z}
-                return True
-            return False
+            pybullet_client.set_pos(pos_m)
+            self.current_state["position"] = {"x": x, "y": y, "z": z}
+            return True
         except Exception:
             return False
 
@@ -35,13 +29,12 @@ class PybulletRobot(RobotBase):
         그리퍼의 개폐 정도를 제어합니다 (0: 닫힘, 100: 열림).
         """
         try:
-            payload = {"open_percent": open_percent}
-            response = requests.post(f"{self.server_url}/set_gripper", json=payload, timeout=2.0)
-            
-            if response.status_code == 200:
-                self.current_state["gripper"] = open_percent
-                return True
-            return False
+            # open_percent(0~100) -> 0.0 ~ 0.06 m 변환
+            # PyBullet 규격: 0.0(닫힘), 0.06(최대 열림)
+            val = (open_percent / 100.0) * 0.06
+            pybullet_client.set_gripper(val)
+            self.current_state["gripper"] = open_percent
+            return True
         except Exception:
             return False
 
@@ -49,16 +42,32 @@ class PybulletRobot(RobotBase):
         """
         현재 로봇 손끝(End-effector)의 cm 좌표를 서버로부터 가져옵니다.
         """
+        # pybullet_client가 실시간 수신하는 최신 상태 반환
+        state = pybullet_client.latest_state.get('robot', {})
+        pos = state.get('ee', {})
+        return {
+            "x": pos.get('x', 0) * 100.0,
+            "y": pos.get('y', 0) * 100.0,
+            "z": pos.get('z', 0) * 100.0
+        }
+
+    def set_joints(self, angles: list, speed: int = 50) -> bool:
+        """
+        5개 관절의 각도를 직접 제어합니다.
+        """
         try:
-            response = requests.get(f"{self.server_url}/get_pose", timeout=1.0)
-            if response.status_code == 200:
-                data = response.json()
-                # m 단위를 다시 cm 단위로 변환하여 반환합니다.
-                return {
-                    "x": data["pos"][0] * 100.0,
-                    "y": data["pos"][1] * 100.0,
-                    "z": data["pos"][2] * 100.0
-                }
+            pybullet_client.set_joints(angles)
+            self.current_state["joints"] = angles
+            return True
+        except Exception:
+            return False
+
+    def emergency_stop(self):
+        """
+        위급 상황 시 로봇의 모든 구동을 즉시 중단합니다.
+        """
+        try:
+            self.current_state["is_moving"] = False
+            requests.post(f"{self.server_url}/stop", timeout=1.0)
         except Exception:
             pass
-        return self.current_state["position"]

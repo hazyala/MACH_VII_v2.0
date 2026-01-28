@@ -1,37 +1,25 @@
 name: MACH_VII_v2.0
 channels:
-  - conda-forge
   - defaults
 dependencies:
   - python=3.10
   - pip
-  # --- [기본 수치 연산 및 시뮬레이션] ---
-  - numpy=1.26.4
-  - scipy
-  - pybullet
-  
   - pip:
-      # --- [Interface: 백엔드 및 통신] ---
-      - fastapi
-      - uvicorn[standard]
-      - websockets
-      - python-socketio
-      - python-dotenv
-      
-      # --- [Brain: 에이전트 및 로직] ---
-      - langchain
-      - langchain-community
-      - langchain-core
-      - requests
-      
-      # --- [Core: 비전 및 하드웨어] ---
-      - opencv-python
-      - ultralytics>=8.3.0
-      - pyrealsense2
-      - Pillow
-      
-      # --- [Memory: 데이터베이스] ---
-      - falkordb
-      
-      # --- [Frontend Build (Node.js required separately)] ---
-      # Node.js 패키지는 interface/frontend/package.json 참조
+    - fastapi==0.99.1
+    - uvicorn==0.40.0
+    - websockets==14.2
+    - requests==2.32.3
+    - numpy==2.2.3
+    - opencv-python==4.11.0.86
+    - ultralytics==8.3.70
+    - langchain==0.2.16
+    - langchain-community==0.2.16
+    - langchain-core==0.2.38
+    - langchain-text-splitters==0.2.4
+    - langsmith==0.1.147
+    - pydantic==1.10.21
+    - torch==2.6.0
+    - torchvision==0.21.0
+    - pybullet==3.2.6
+    - falkordb==1.4.0
+    - python-dotenv==1.0.1
