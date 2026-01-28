@@ -58,24 +58,41 @@ class EmotionController:
                     setattr(self.target_vector, k, v)
 
     def step(self, dt: float):
-        """현재 상태를 목표 상태로 보간합니다 (고속 루프)."""
+        """현재 상태를 목표 상태로 보간하고, 물리 표현 파라미터(Muscles)를 계산합니다."""
         smoothing_factor = 2.0 * dt # 속도 조절
         
         with self._lock:
             curr = self.current_vector
             tgt = self.target_vector
             
-            # 단순 선형 보간 (Lerp)
+            # 1. 감정 벡터 보간 (Lerp)
             curr.focus += (tgt.focus - curr.focus) * smoothing_factor
             curr.effort += (tgt.effort - curr.effort) * smoothing_factor
             curr.confidence += (tgt.confidence - curr.confidence) * smoothing_factor
             curr.frustration += (tgt.frustration - curr.frustration) * smoothing_factor
             curr.curiosity += (tgt.curiosity - curr.curiosity) * smoothing_factor
 
+            # 2. [NEW] 물리 표현 파라미터 계산 (Dumb UI 지원)
+            # 프론트엔드가 복잡한 계산을 하지 않도록 최종 렌더링 값(0~1)을 산출합니다.
+            self.muscles = {
+                "eye": {
+                    "openness": float(max(0.0, min(1.0, 1.0 - (curr.effort * 0.3)))),
+                    "smile": float(max(-1.0, min(1.0, (curr.confidence * 1.0) - (curr.frustration * 1.0)))),
+                },
+                "mouth": {
+                    "smile": float(max(-1.0, min(1.0, (curr.confidence * 1.0) - (curr.frustration * 1.0)))),
+                    "width": float(max(0.0, min(1.0, 0.5 + (curr.confidence * 0.3))))
+                },
+                "head": {
+                    "roll": float(max(-20.0, min(20.0, curr.curiosity * 15.0 if curr.curiosity > 0.6 else 0.0)))
+                }
+            }
+
     def start(self):
         """60Hz 보간 루프를 시작합니다."""
         if self.running: return
         self.running = True
+        self.muscles = {} # 파라미터 초기화
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
         print("[Emotion] 컨트롤러 시작됨 (60Hz).")
@@ -99,7 +116,10 @@ class EmotionController:
 
     def get_current_emotion(self):
         with self._lock:
-            return self.current_vector.to_dict()
+            return {
+                "vector": self.current_vector.to_dict(),
+                "muscles": self.muscles
+            }
 
 # 싱글톤 인스턴스
 emotion_controller = EmotionController()

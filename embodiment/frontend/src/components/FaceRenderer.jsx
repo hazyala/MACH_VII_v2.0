@@ -1,66 +1,28 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import useAppStore from '../store';
-import { ExpressionEngine } from '../logic/ExpressionEngine';
 
 const FaceRenderer = ({ size = 140 }) => {
     const emotion = useAppStore((state) => state.emotion);
 
-    // Internal Engine
-    const engineRef = useRef(new ExpressionEngine());
-
-    // DOM Refs for Direct Manipulation
-    const leftEyeRef = useRef(null);
-    const rightEyeRef = useRef(null);
-    const mouthRef = useRef(null);
-    const faceGroupRef = useRef(null); // For Head Roll
-
-    // Sync Emotion Store -> Engine Target
-    useEffect(() => {
-        engineRef.current.updateTargetFromEmotion(emotion);
-    }, [emotion]);
-
-    // Animation Loop (60fps, No React Render)
-    useEffect(() => {
-        let frameId;
-        let lastTime = performance.now();
-
-        const loop = (now) => {
-            const dt = (now - lastTime) / 1000;
-            lastTime = now;
-
-            // 1. Update Physics/Interpolation
-            const curr = engineRef.current.update(dt, false); // isManual=false
-
-            // 2. Direct DOM Updates
-            // Eye Openness (Scale Y)
-            const leftOpen = curr.leftEye?.openness ?? 1.0;
-            const rightOpen = curr.rightEye?.openness ?? 1.0;
-            if (leftEyeRef.current) leftEyeRef.current.setAttribute('ry', 15 * leftOpen);
-            if (rightEyeRef.current) rightEyeRef.current.setAttribute('ry', 15 * rightOpen);
-
-            // Head Roll
-            const roll = curr.head?.roll ?? 0.0;
-            if (faceGroupRef.current) {
-                faceGroupRef.current.setAttribute('transform', `rotate(${roll}, 100, 100)`);
-            }
-
-            // Mouth Shape
-            // Simple Quadratic Bezier: M 70 120 Q 100 [ControlY] 130 120
-            // Happiness 0 -> Straight (120), 1 -> Smile (140), -1 -> Frown (100)
-            const happiness = curr.happiness ?? 0.0;
-            const controlY = 120 + (happiness * 20);
-            if (mouthRef.current) {
-                mouthRef.current.setAttribute('d', `M 70 120 Q 100 ${controlY} 130 120`);
-            }
-
-            frameId = requestAnimationFrame(loop);
-        };
-
-        frameId = requestAnimationFrame(loop);
-        return () => cancelAnimationFrame(frameId);
-    }, []);
+    // 백엔드에서 전송된 물리 표현 파라미터 (muscles) 추출
+    const muscles = emotion?.muscles || {
+        eye: { openness: 1.0, smile: 0.0 },
+        mouth: { smile: 0.0, width: 0.5 },
+        head: { roll: 0.0 }
+    };
 
     const faceColor = "#1D1D1F";
+
+    // 1. 눈 형태 계산 (openness 기반)
+    const eyeRY = 15 * muscles.eye.openness;
+
+    // 2. 입 형태 계산 (Quadratic Bezier)
+    // M 70 120 Q 100 [ControlY] 130 120
+    const controlY = 120 + (muscles.mouth.smile * 20);
+    const mouthPath = `M 70 120 Q 100 ${controlY} 130 120`;
+
+    // 3. 머리 각도 계산
+    const headTransform = `rotate(${muscles.head.roll}, 100, 100)`;
 
     return (
         <div className="w-full h-full flex items-center justify-center">
@@ -70,15 +32,14 @@ const FaceRenderer = ({ size = 140 }) => {
                 viewBox="0 0 200 200"
                 style={{ overflow: 'visible' }}
             >
-                {/* Global Transform Group */}
-                <g ref={faceGroupRef}>
+                {/* Global Transform Group (Head Roll) */}
+                <g transform={headTransform}>
 
                     {/* Left Eye */}
                     <g transform="translate(70, 80)">
                         <ellipse
-                            ref={leftEyeRef}
                             cx="0" cy="0"
-                            rx="12" ry="15"
+                            rx="12" ry={eyeRY}
                             fill={faceColor}
                         />
                         <circle cx="3" cy="-4" r="3" fill="white" opacity="0.2" />
@@ -87,9 +48,8 @@ const FaceRenderer = ({ size = 140 }) => {
                     {/* Right Eye */}
                     <g transform="translate(130, 80)">
                         <ellipse
-                            ref={rightEyeRef}
                             cx="0" cy="0"
-                            rx="12" ry="15"
+                            rx="12" ry={eyeRY}
                             fill={faceColor}
                         />
                         <circle cx="3" cy="-4" r="3" fill="white" opacity="0.2" />
@@ -97,8 +57,7 @@ const FaceRenderer = ({ size = 140 }) => {
 
                     {/* Mouth */}
                     <path
-                        ref={mouthRef}
-                        d="M 70 120 Q 100 120 130 120"
+                        d={mouthPath}
                         stroke={faceColor}
                         strokeWidth="4"
                         fill="none"

@@ -15,8 +15,10 @@ from langchain.memory import ConversationBufferMemory
 from langchain.prompts import MessagesPlaceholder
 from langchain.callbacks.base import BaseCallbackHandler
 
+from shared.pipeline import pipeline
+
 class AgentBroadcasterCallback(BaseCallbackHandler):
-    """LangChain의 사고 과정(Thought)을 Broadcaster로 송출하는 콜백"""
+    """LangChain의 사고 과정(Thought)을 Broadcaster로 송출하고 파이프라인을 트리거하는 콜백"""
     def on_chain_start(self, serialized, inputs, **kwargs):
         broadcaster.publish("agent_thought", ">>>> 생각 시작...")
 
@@ -26,22 +28,23 @@ class AgentBroadcasterCallback(BaseCallbackHandler):
     def on_agent_action(self, action, **kwargs):
         broadcaster.publish("agent_thought", f"[도구 사용] {action.tool}: {action.tool_input}")
 
-    def on_tool_end(self, output, **kwargs):
-        broadcaster.publish("agent_thought", f"[관측 결과] {output}")
-
     def on_agent_finish(self, finish, **kwargs):
-        broadcaster.publish("agent_thought", f"[최종 답변] {finish.return_values['output']}")
+        # 1. [핵심] 파이프라인 실행 (Layer 3 -> Layer 4 -> ... -> Layer 7)
+        intent = finish.return_values.get("output", "IDLE")
+        pipeline.process_brain_intent(intent)
+        
+        # 2. UI 통보
+        broadcaster.publish("agent_thought", f"[최종 답변] {intent}")
         broadcaster.publish("agent_thought", "<<<< 생각 종료.")
+
+from strategy.strategy_manager import strategy_manager
 
 class LogicBrain:
     """
     LangChain 기반의 메인 논리 에이전트 클래스입니다.
     """
     def __init__(self):
-        self.context = {
-            "allow_explore": False,
-            "risk_level": "LOW"
-        }
+        # 전략적 상태는 이제 StrategyManager가 전담합니다.
         
         # 1. LLM 초기화 (Ollama)
         try:
@@ -80,11 +83,6 @@ class LogicBrain:
         )
         
         broadcaster.log_chat("bot", "MACH-VII 두뇌(Brain)가 활성화되었습니다.")
-
-    def set_context(self, allow_explore: bool, risk_level: str):
-        self.context["allow_explore"] = allow_explore
-        self.context["risk_level"] = risk_level
-        print(f"[LogicBrain] Context Updated: Explore={allow_explore}, Risk={risk_level}")
 
     async def execute_task(self, task_command: str):
         """

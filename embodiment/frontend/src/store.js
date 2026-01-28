@@ -10,11 +10,18 @@ const useAppStore = create((set) => ({
         timestamp: 0
     },
     emotion: {
-        focus: 0.5,
-        effort: 0.0,
-        confidence: 0.5,
-        frustration: 0.0,
-        curiosity: 0.5
+        vector: {
+            focus: 0.5,
+            effort: 0.0,
+            confidence: 0.5,
+            frustration: 0.0,
+            curiosity: 0.5
+        },
+        muscles: {
+            eye: { openness: 1.0, smile: 0.0 },
+            mouth: { smile: 0.0, width: 0.5 },
+            head: { roll: 0.0 }
+        }
     },
     perception: {
         obstacle_distance_cm: 0,
