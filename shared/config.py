@@ -21,20 +21,28 @@ class PathConfig:
     """pathlib을 사용한 경로 관리 클래스입니다."""
     BASE_DIR = Path(__file__).resolve().parent.parent
     
-    CORE_DIR = BASE_DIR / "core"
+    # 7 Layer Pipeline 및 주요 디렉토리
+    SENSOR_DIR = BASE_DIR / "sensor"
+    STATE_DIR = BASE_DIR / "state"
     BRAIN_DIR = BASE_DIR / "brain"
-    EMOTION_DIR = BASE_DIR / "emotion"
-    POLICY_DIR = BASE_DIR / "policy"
+    STRATEGY_DIR = BASE_DIR / "strategy"
+    EXPRESSION_DIR = BASE_DIR / "expression"
+    EMBODIMENT_DIR = BASE_DIR / "embodiment"
     MEMORY_DIR = BASE_DIR / "memory"
-    INTERFACE_DIR = BASE_DIR / "interface"
-    SHARED_DIR = BASE_DIR / "shared"
     
-    DATA_DIR = BASE_DIR / "base_data"
+    # 공유 및 인터페이스
+    SHARED_DIR = BASE_DIR / "shared"
+    INTERFACE_DIR = BASE_DIR / "interface"
+    
+    # 데이터 및 문서
+    DATA_DIR = BASE_DIR / "data"
     MODEL_DIR = DATA_DIR / "models"
     LOG_DIR = DATA_DIR / "logs"
+    DOCS_DIR = BASE_DIR / "docs"
 
     @staticmethod
     def ensure_dirs():
+        """필요한 데이터 디렉토리가 없으면 생성합니다."""
         for path in [PathConfig.DATA_DIR, PathConfig.MODEL_DIR, PathConfig.LOG_DIR]:
             path.mkdir(parents=True, exist_ok=True)
 

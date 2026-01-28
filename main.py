@@ -2,9 +2,11 @@ import uvicorn
 import os
 import sys
 
+from shared.config import PathConfig
+
 # 프로젝트 루트를 Python Path에 추가
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(BASE_DIR)
+BASE_DIR = PathConfig.BASE_DIR
+sys.path.append(str(BASE_DIR))
 
 from interface.backend.api_server import app
 

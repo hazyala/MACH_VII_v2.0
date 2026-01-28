@@ -1,13 +1,18 @@
-# brain/modules/vision/yolo_detector.py
+# sensor/yolo_detector.py
 
 import torch
 from ultralytics import YOLO
+
+from shared.config import PathConfig
 
 class YoloDetector:
     """
     YOLOv11s 모델을 사용하여 영상 내의 객체를 탐지하는 클래스입니다.
     """
-    def __init__(self, model_path: str = "data/models/yolo11s.pt"):
+    def __init__(self, model_path: str = None):
+        if model_path is None:
+            model_path = str(PathConfig.MODEL_DIR / "yolo11s.pt")
+            
         # 연산 장치 설정: GPU 사용 가능 시 cuda, 불가 시 cpu 사용
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         # 모델 로드 및 장치 할당

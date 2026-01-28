@@ -1,4 +1,4 @@
-# brain/modules/robot/robot_factory.py
+# embodiment/robot_factory.py
 
 import streamlit as st
 from embodiment.hardware.pybullet_robot import PybulletRobot

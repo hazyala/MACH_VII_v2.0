@@ -1,4 +1,4 @@
-# brain/modules/robot/motion_controller.py
+# embodiment/motion_controller.py
 
 import numpy as np
 

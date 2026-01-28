@@ -115,7 +115,8 @@ MACH_VII_v2.0/
 │   ├── frontend/    # [View] React Face UI
 │   └── hardware/    # [HW] Robot Drivers
 ├── memory/          # [Layer 7] 기억 및 로그 (FalkorDB)
-├── shared/          # 공용 모듈
+├── shared/          # 공용 모듈 (경로 및 설정 관리)
+├── data/            # [NEW] 모델, 로그 등 데이터 저장소
 ├── docs/            # 문서
 ├── main.py          # [Entry] 시스템 진입점
 ├── docker-compose.yml # [DB] FalkorDB 실행 설정
@@ -169,6 +170,10 @@ npm run dev
 
 ### UI IS DUMB
 *   **UI는 절대 판단하지 않습니다.** 오직 그리기만 합니다.
+
+### CENTRALIZED PATH MANAGEMENT
+*   모든 파일 및 디렉토리 경로는 `shared/config.py`의 `PathConfig`를 참조해야 합니다.
+*   하드코딩된 문자열 경로나 `os.path` 직접 사용을 지양하고 `pathlib` 기반의 `PathConfig`를 사용하십시오.
 
 ---
 

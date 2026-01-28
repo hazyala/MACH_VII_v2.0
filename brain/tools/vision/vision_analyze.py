@@ -3,7 +3,7 @@ import requests
 import cv2
 import streamlit as st
 from langchain_core.tools import tool
-from brain.modules.vision.vision_bridge import VisionBridge
+from sensor.vision_bridge import VisionBridge
 from shared.config import GlobalConfig
 
 @tool

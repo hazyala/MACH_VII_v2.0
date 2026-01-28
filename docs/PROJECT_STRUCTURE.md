@@ -37,7 +37,8 @@ MACH_VII_v2.0/
 │   ├── falkordb_manager.py  # Graph DB 관리자
 │   └── 📂 data/             # [Persistence] DB 데이터 저장소 (Docker Volume)
 │
-├── 📂 shared/               # 공통 유틸리티
+├── 📂 shared/               # 공통 유틸리티 (경로 및 전역 설정 관리)
+│   ├── config.py            # [Central] PathConfig 및 시스템 설정
 │   └── ...
 │
 ├── 📂 interface/            # 외부 인터페이스
@@ -79,4 +80,5 @@ UI 상태 직접 변경
 
 ### 7. `shared/`
 *   **역할**: 모든 레이어에서 공통으로 사용하는 설정값과 데이터 타입을 관리합니다.
+*   **핵심**: `PathConfig`를 통해 프로젝트 내 모든 파일 경로를 중앙 집중식(`pathlib` 기반)으로 관리합니다.
 *   **규칙**: 여기 있는 모듈은 어디서든 Import 가능하지만, 비즈니스 로직을 포함해선 안 됩니다.
