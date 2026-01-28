@@ -15,6 +15,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain.prompts import MessagesPlaceholder
 from langchain.callbacks.base import BaseCallbackHandler
 
+from shared.intents import ActionIntent
 from shared.pipeline import pipeline
 
 class AgentBroadcasterCallback(BaseCallbackHandler):
@@ -30,11 +31,14 @@ class AgentBroadcasterCallback(BaseCallbackHandler):
 
     def on_agent_finish(self, finish, **kwargs):
         # 1. [핵심] 파이프라인 실행 (Layer 3 -> Layer 4 -> ... -> Layer 7)
-        intent = finish.return_values.get("output", "IDLE")
-        pipeline.process_brain_intent(intent)
+        intent_raw = finish.return_values.get("output", "IDLE")
+        
+        # 파이프라인 내부에서 이미 변환하지만, 로깅을 위해 여기서도 변환
+        intent_enum = ActionIntent.from_str(intent_raw)
+        pipeline.process_brain_intent(intent_enum)
         
         # 2. UI 통보
-        broadcaster.publish("agent_thought", f"[최종 답변] {intent}")
+        broadcaster.publish("agent_thought", f"[최종 판단] {intent_enum.name} ({intent_raw[:30]}...)")
         broadcaster.publish("agent_thought", "<<<< 생각 종료.")
 
 from strategy.strategy_manager import strategy_manager

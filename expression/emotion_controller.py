@@ -16,15 +16,20 @@ class EmotionController:
         self.running = False
         self._lock = threading.Lock()
         
+        # 우선순위 제어를 위한 타임스탬프 (파이프라인 업데이트 보호용)
+        self.manual_override_until = 0.0
+        
         # 브레인 이벤트 구독
         broadcaster.subscribe(self.on_brain_state_change)
 
     def on_brain_state_change(self, state: Dict[str, any]):
-        """브레인 상태가 변경될 때 호출되는 콜백입니다. (예: PLANNING -> EXECUTING)"""
+        """브레인 상태가 변경될 때 호출되는 콜백입니다."""
+        # 파이프라인에 의한 수동 조작이 활성화된 경우 상태 기반 자동 업데이트 무시
+        if time.time() < self.manual_override_until:
+            return
+
         agent_state = state.get("agent_state", "IDLE")
         
-        # 즉각적인 반응을 위한 휴리스틱 매핑 (기본 레이어)
-        # 추후 LLM 업데이터가 이를 정교하게 조정할 예정입니다.
         with self._lock:
             if agent_state == "PLANNING":
                 self.target_vector.focus = 0.8
@@ -36,23 +41,25 @@ class EmotionController:
                 self.target_vector.focus = 0.3
                 self.target_vector.effort = 0.0
                 self.target_vector.frustration = 0.0
-                self.target_vector.confidence = 0.5 # 중립 (Neutral)
+                self.target_vector.confidence = 0.5 
             elif agent_state == "RECOVERING": 
-                # 실패 상황 -> 붉은 얼굴
                 self.target_vector.focus = 0.5
-                self.target_vector.frustration = 0.9 # 높은 좌절감 (Red)
+                self.target_vector.frustration = 0.9 
                 self.target_vector.confidence = 0.1
                 self.target_vector.effort = 0.8
             elif agent_state == "SUCCESS":
-                # 성공 상황 -> 행복
                 self.target_vector.focus = 0.5
                 self.target_vector.frustration = 0.0
-                self.target_vector.confidence = 1.0 # 활짝 웃음 (Big Smile)
+                self.target_vector.confidence = 1.0 
                 self.target_vector.effort = 0.0
 
-    def update_target(self, new_target: Dict[str, float]):
-        """LLM 업데이터가 감정 목표를 정교하게 조정할 때 호출합니다."""
+    def update_target(self, new_target: Dict[str, float], duration: float = 3.0):
+        """
+        파이프라인 등에서 감정 목표를 명시적으로 조정할 때 호출합니다. 
+        일정 시간(duration) 동안 상태 기반 자동 업데이트를 차단합니다.
+        """
         with self._lock:
+            self.manual_override_until = time.time() + duration
             for k, v in new_target.items():
                 if hasattr(self.target_vector, k):
                     setattr(self.target_vector, k, v)
