@@ -1,7 +1,7 @@
-# core/pybullet_robot.py
+# embodiment/pybullet_robot.py
 
-from embodiment.hardware.robot_base import RobotBase
-from interface.backend.pybullet_client import pybullet_client
+from .robot_base import RobotBase
+from interface.pybullet_client import pybullet_client
 
 class PybulletRobot(RobotBase):
     """

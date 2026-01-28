@@ -3,17 +3,16 @@ import time
 from typing import Dict, Any
 from shared.state_broadcaster import broadcaster
 from state.system_state import system_state
-from .hardware.pybullet_robot import PybulletRobot
+from .robot_factory import RobotFactory
 
 class RobotController:
     """
     Brain의 '의도(Intent)'를 물리적인 움직임으로 변환하는 싱글톤 컨트롤러입니다.
-    Broadcaster의 'action_intent' 채널을 구독합니다.
     """
     def __init__(self):
         self.lock = threading.Lock()
-        # 기본적으로 PyBullet 로봇 드라이버 사용 (추후 설정에 따라 변경 가능)
-        self.robot_driver = PybulletRobot() 
+        # RobotFactory를 통해 현재 설정에 맞는 드라이버 획득
+        self.robot_driver = RobotFactory.get_robot()
         self.running = False
         self.last_intent = None
         

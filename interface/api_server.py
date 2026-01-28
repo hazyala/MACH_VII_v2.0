@@ -11,7 +11,8 @@ from brain.logic_brain import logic_brain
 from expression.emotion_controller import emotion_controller
 from brain.emotion_updater import llm_updater
 from sensor.realsense_driver import realsense_driver
-from interface.backend.pybullet_client import pybullet_client
+from sensor.perception_manager import perception_manager
+from .pybullet_client import pybullet_client
 from memory.falkordb_manager import memory_manager
 from strategy.strategy_manager import strategy_manager
 
@@ -28,7 +29,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     # 1. 하위 계층 드라이버 및 루프 시작
-    realsense_driver.start()
+    perception_manager.start()
     emotion_controller.start()
     llm_updater.start()
     
@@ -46,7 +47,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    realsense_driver.stop()
+    perception_manager.stop()
     emotion_controller.stop()
     llm_updater.stop()
     from embodiment.robot_controller import robot_controller

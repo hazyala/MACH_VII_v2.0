@@ -7,15 +7,20 @@ class GlobalConfig:
     SIM_MODE = True
     
     # 브레인(Brain) 설정
-    LLM_ENDPOINT = "http://ollama.aikopo.net/api/generate"
-    LLM_MODEL = "gemma3:27b"
+    VLM_ENDPOINT = "http://ollama.aikopo.net/api/generate"
+    VLM_MODEL = "gemma3:27b"
+    
+    # 통신 및 서버 설정
+    SIM_SERVER_URL = "http://localhost:5000"
+    API_PORT = 8000
     
     # 감정(Emotion) 설정
     EMOTION_UPDATE_INTERVAL = 0.5  # 초 단위 (저수준 LLM 업데이트 주기)
     EMOTION_RENDER_FPS = 60        # 초당 프레임 수 (고수준 보간 루프)
     
-    # 로봇(Robot) 설정
+    # 로봇(Robot) 및 센서(Sensor) 설정
     ROBOT_IP = "192.168.0.100"     # DOFBOT IP 주소
+    CAMERA_FPS = 30
     
 class PathConfig:
     """pathlib을 사용한 경로 관리 클래스입니다."""

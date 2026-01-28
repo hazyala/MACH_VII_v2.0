@@ -3,6 +3,7 @@ import threading
 import time
 import requests
 import logging
+from shared.config import GlobalConfig
 
 class PyBulletClient:
     _instance = None
@@ -16,7 +17,7 @@ class PyBulletClient:
     def __init__(self):
         if self.initialized: return
         self.sio = socketio.Client()
-        self.server_url = "http://localhost:5000"
+        self.server_url = GlobalConfig.SIM_SERVER_URL
         self.connected = False
         self.latest_state = {}
         self.lock = threading.Lock()

@@ -1,19 +1,23 @@
 # embodiment/robot_factory.py
 
-import streamlit as st
-from embodiment.hardware.pybullet_robot import PybulletRobot
+from shared.config import GlobalConfig
+from .pybullet_robot import PybulletRobot
 
 class RobotFactory:
     """
-    설정에 맞는 로봇 드라이버 인스턴스를 생성하여 반환합니다.
+    전역 설정(SIM_MODE)에 맞는 로봇 드라이버 인스턴스를 생성하여 반환합니다.
     """
+    _instance = None
+
     @staticmethod
     def get_robot():
-        # Streamlit 세션 상태에서 시뮬레이션 여부를 확인합니다.
-        is_sim = st.session_state.get("sim_mode", True)
-        
-        if is_sim:
+        """
+        설정된 모드에 따라 로봇 드라이버를 반환합니다.
+        싱글톤 패턴을 적용하여 중복 생성을 방지할 수 있습니다.
+        """
+        if GlobalConfig.SIM_MODE:
             return PybulletRobot()
         
-        # 향후 실물 로봇(DofbotRobot) 추가 시 이 부분에 구현체를 연결합니다.
+        # 실물 로봇(Dofbot) 드라이버는 향후 구현 시 추가
+        # return DofbotRobot()
         return None

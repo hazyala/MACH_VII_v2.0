@@ -2,7 +2,7 @@
 
 import numpy as np
 from sensor.vision_base import VisionBase
-from interface.backend.pybullet_client import PybulletClient
+from interface.pybullet_client import PybulletClient
 
 class PybulletVision(VisionBase):
     def __init__(self):

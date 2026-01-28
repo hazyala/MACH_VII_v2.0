@@ -8,7 +8,10 @@ from shared.config import PathConfig
 BASE_DIR = PathConfig.BASE_DIR
 sys.path.append(str(BASE_DIR))
 
-from interface.backend.api_server import app
+from interface.api_server import app
+
+# 초기 실행 시 필수 디렉토리 확인 및 생성
+PathConfig.ensure_dirs()
 
 def main():
     print("==========================================")

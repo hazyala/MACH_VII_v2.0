@@ -3,7 +3,7 @@
 import streamlit as st
 from shared.config import GlobalConfig, CameraConfig
 from sensor.pybullet_vision import PybulletVision
-# from sensor.realsense_vision import RealSenseVision # 실물 드라이버 구현 시 주석 해제
+from sensor.realsense_vision import RealSenseVision
 from sensor.yolo_detector import YoloDetector
 
 class VisionBridge:
@@ -20,7 +20,7 @@ class VisionBridge:
             self.driver = PybulletVision()
             self.offset = CameraConfig.SIM_OFFSET
         else:
-            # self.driver = RealSenseVision()
+            self.driver = RealSenseVision()
             self.offset = CameraConfig.REAL_OFFSET
 
         # 3. 객체 탐지를 위한 YOLOv11 엔진을 초기화합니다.
