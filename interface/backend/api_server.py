@@ -4,18 +4,16 @@ import asyncio
 import json
 import time
 
-import sys
-from pathlib import Path
-
-# 프로젝트 루트를 sys.path에 추가하여 'shared', 'brain', 'emotion' 모듈을 찾을 수 있게 합니다.
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.append(str(BASE_DIR))
+# sys.path hacking removed as we run from root
+# from pathlib import Path
+# BASE_DIR = Path(__file__).resolve().parent.parent.parent
+# sys.path.append(str(BASE_DIR))
 
 from shared.state_broadcaster import broadcaster
 from brain.logic_brain import logic_brain
-from emotion.emotion_controller import emotion_controller
-from emotion.llm_updater import llm_updater
-from core.realsense_driver import realsense_driver
+from expression.emotion_controller import emotion_controller
+from brain.emotion_updater import llm_updater
+from sensor.realsense_driver import realsense_driver
 from memory.falkordb_manager import memory_manager
 
 app = FastAPI()

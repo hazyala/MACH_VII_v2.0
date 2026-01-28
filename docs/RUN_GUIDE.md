@@ -18,33 +18,31 @@
 1.  **OS**: Windows 10/11 (권장) 또는 Linux/macOS
 2.  **Package Manager**: Anaconda (또는 Miniconda)
 3.  **Runtime**: Node.js v18 이상 (프론트엔드용)
-4.  **Database**: FalkorDB (Docker 컨테이너, 선택 사항)
+4.  **Database**: Docker Desktop (FalkorDB 실행용)
 
 ---
 
 ## 2. 백엔드(Backend) 환경 설정 및 실행
 
-백엔드는 **Python 3.10** 기반의 Conda 가상환경에서 실행됩니다.
-
-### 2.1 가상환경 생성
-프로젝트 루트(`d:\ARMY\MACH_VII_v2.0`)에서 터미널을 열고 실행합니다.
+### 2.1 데이터베이스 실행 (필수)
+프로젝트 루트에서 Docker Compose를 사용하여 DB를 실행합니다.
 
 ```bash
-# environment.yml 파일을 기반으로 가상환경 자동 생성
+docker-compose up -d
+```
+> **참고**: `docker-compose.yml` 설정을 통해 데이터베이스의 데이터는 로컬 `memory/data` 폴더에 영구적으로 보존됩니다. 컨테이너를 삭제해도 로컬 폴더를 지우지 않는 한 기억은 유지됩니다.
+
+### 2.2 가상환경 생성 및 실행
+터미널(Anaconda Prompt 권장)을 열고 실행합니다.
+
+```bash
+# 가상환경 생성
 conda env create -f environment.yml
 
 # 가상환경 활성화
 conda activate MACH_VII_v2.0
-```
 
-### 2.2 패키지 업데이트 (환경 변경 시)
-`environment.yml` 파일이 수정되었을 경우 아래 명령어로 동기화합니다.
-```bash
-conda env update --file environment.yml --prune
-```
-
-### 2.3 실행
-```bash
+# 시스템 실행
 python main.py
 ```
 *   **정상 실행 확인**: 터미널에 `[Main] System Started` 로그가 출력되고, `http://localhost:8000` 접속 시 상태 메시지가 반환되어야 합니다.

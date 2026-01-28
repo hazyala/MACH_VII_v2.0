@@ -39,7 +39,7 @@ class LogicBrain:
         print(f"[LogicBrain] Selected Policy: {type(policy).__name__}")
         
         # 메모리 기록을 위한 시작 감정 포착
-        from emotion.emotion_controller import emotion_controller
+        from expression.emotion_controller import emotion_controller
         start_emotion = emotion_controller.get_current_emotion()
         
         # 4. 실행 (Execute)

@@ -5,50 +5,48 @@
 
 ## 📦 전체 디렉토리 트리 (Target Architecture)
 
-```
 MACH_VII_v2.0/
-├── 📂 sensor/               # [Layer 1] 감각 계층 (Input)
-│   ├── realsense_driver.py  # RealSense 카메라 제어 드라이버
-│   └── mic_input.py         # 마이크 입력 처리
+├── 📂 sensor/               # [Layer 1] 감각 계층 (Raw Data)
+│   ├── realsense_driver.py  # RealSense 카메라 드라이버
+│   ├── vision_base.py       # 비전 인터페이스
+│   └── pybullet_vision.py   # 시뮬레이션 비전
 │
-├── 📂 state/                # [Layer 2] 상태 계층 (State Definition)
-│   ├── world_model.py       # 현재 환경 모델링
-│   └── system_state.py      # 시스템 상태 정의 (DTO)
+├── 📂 state/                # [Layer 2] 상태 계층 (Single Source of Truth)
+│   ├── system_state.py      # 전체 시스템 상태 (Root Object)
+│   └── emotion_state.py     # 감정 상태 컴포넌트
 │
-├── 📂 brain/                # [Layer 3] 판단 계층 (Decision Making)
-│   ├── logic_brain.py       # 메인 로직 결정 (LLM/Rule)
-│   └── emotion_core.py      # 감정 상태 관리
+├── 📂 brain/                # [Layer 3] 판단 계층 (Decision/Intent)
+│   ├── logic_brain.py       # 로직 기반 판단 모듈
+│   └── emotion_updater.py   # LLM 기반 감정 업데이트
 │
-├── 📂 strategy/             # [Layer 4] 전략 계층 (Filtering)
-│   ├── mode_manager.py      # Safe/Explore/Combat 모드 관리
-│   └── personality.py       # 성향 필터
+├── 📂 strategy/             # [Layer 4] 전략 계층 (Filtering/Mode)
+│   ├── base_policy.py       # 행동 정책 인터페이스
+│   ├── safe_policy.py       # 안전 모드 정책
+│   └── explore_policy.py    # 탐험 모드 정책
 │
-├── 📂 expression/           # [Layer 5] 표현 계층 (Physics Interaction)
-│   ├── expression_engine.py # 60fps 움직임 보간 및 생성
-│   └── motion_library.py    # 사전 정의된 모션(인사, 거절 등)
+├── 📂 expression/           # [Layer 5] 표현 계층 (Interpolation)
+│   └── emotion_controller.py# 감정/표정 제어 및 보간 (60Hz)
 │
-├── 📂 embodiment/           # [Layer 6] 구현 계층 (Rendering/Hardware)
-│   ├── 📂 frontend/         # React 기반 얼굴 UI (Websocket Client)
-│   └── 📂 hardware/         # 실제 로봇 하드웨어 드라이버 (Dofbot 등)
+├── 📂 embodiment/           # [Layer 6] 구현 계층 (Action/Rendering)
+│   ├── 📂 frontend/         # React 웹 UI
+│   └── 📂 hardware/         # 로봇 하드웨어 제어
+│       ├── robot_base.py    # 로봇 인터페이스
+│       └── dofbot_robot.py  # 실제 로봇 드라이버
 │
-├── 📂 memory/               # [Layer 7] 기억 계층 (Storage)
-│   ├── falkordb_manager.py  # Graph DB 연동
-│   └── logger.py            # 시스템 로그 관리
+├── 📂 memory/               # [Layer 7] 기억 계층 (DB)
+│   ├── falkordb_manager.py  # Graph DB 관리자
+│   └── 📂 data/             # [Persistence] DB 데이터 저장소 (Docker Volume)
 │
-├── 📂 shared/               # 공통 모듈 (Cross-cutting Concerns)
-│   ├── config.py            # 전역 설정
-│   ├── event_bus.py         # 내부 메시지 브로드캐스터
-│   └── types.py             # 공용 데이터 타입 (DTO)
+├── 📂 shared/               # 공통 유틸리티
+│   └── ...
 │
-├── 📂 docs/                 # 프로젝트 문서 (인수인계용)
-│   ├── PROJECT_STRUCTURE.md # 본 파일
-│   ├── RUN_GUIDE.md         # 실행 가이드
-│   └── ARCHITECTURE_GUIDELINES.md # 설계 원칙
+├── 📂 interface/            # 외부 인터페이스
+│   └── 📂 backend/
+│       └── api_server.py    # FastAPI 백엔드 서버
 │
-├── .gitignore               # Git 무시 설정
-├── environment.yml          # Conda 환경 설정 파일
-└── main.py                  # 프로그램 진입점 (Entry Point)
-```
+├── main.py                  # [Root] 시스템 실행 진입점
+├── docker-compose.yml       # [Conf] DB 컨테이너 설정
+└── environment.yml          # [Conf] Conda 환경 설정
 
 ## 🔍 주요 디렉토리별 역할 상세
 

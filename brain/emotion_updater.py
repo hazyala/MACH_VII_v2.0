@@ -1,7 +1,7 @@
 import time
 import threading
 from shared.state_broadcaster import broadcaster
-from .emotion_controller import emotion_controller
+from expression.emotion_controller import emotion_controller
 
 class LLMUpdater:
     """

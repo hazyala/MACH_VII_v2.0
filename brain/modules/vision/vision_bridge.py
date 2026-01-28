@@ -2,8 +2,8 @@
 
 import streamlit as st
 from shared.config import GlobalConfig, CameraConfig
-from core.pybullet_vision import PybulletVision
-# from core.realsense_vision import RealSenseVision # 실물 드라이버 구현 시 주석 해제
+from sensor.pybullet_vision import PybulletVision
+# from sensor.realsense_vision import RealSenseVision # 실물 드라이버 구현 시 주석 해제
 from brain.modules.vision.yolo_detector import YoloDetector
 
 class VisionBridge:

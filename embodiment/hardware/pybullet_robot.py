@@ -1,7 +1,7 @@
 # core/pybullet_robot.py
 
 import requests
-from core.robot_base import RobotBase
+from embodiment.hardware.robot_base import RobotBase
 
 class PybulletRobot(RobotBase):
     """

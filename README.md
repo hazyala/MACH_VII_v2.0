@@ -106,18 +106,20 @@
 
 ```
 MACH_VII_v2.0/
-├── sensor/          # 감각 수집
-├── state/           # 상황 정의
-├── brain/           # 판단 및 로직
-├── strategy/        # 성향 및 모드
-├── expression/      # 표현 엔진
-├── embodiment/      # UI 및 하드웨어
-│   ├── frontend/    # React Face UI
-│   └── hardware/    # Robot Drivers
-├── memory/          # 기억 및 로그
+├── sensor/          # [Layer 1] 감각 수집 (RealSense, Mic)
+├── state/           # [Layer 2] 상태 정의 (SystemState, Emotion)
+├── brain/           # [Layer 3] 판단 및 로직 (LogicBrain, LLM)
+├── strategy/        # [Layer 4] 전략 및 성향 (Policy, Persona)
+├── expression/      # [Layer 5] 표현 엔진 (EmotionController)
+├── embodiment/      # [Layer 6] 구현 계층
+│   ├── frontend/    # [View] React Face UI
+│   └── hardware/    # [HW] Robot Drivers
+├── memory/          # [Layer 7] 기억 및 로그 (FalkorDB)
 ├── shared/          # 공용 모듈
 ├── docs/            # 문서
-└── main.py          # 실행 진입점
+├── main.py          # [Entry] 시스템 진입점
+├── docker-compose.yml # [DB] FalkorDB 실행 설정
+└── environment.yml  # [Env] Conda 환경 설정
 ```
 
 ---
@@ -129,15 +131,16 @@ MACH_VII_v2.0/
 *   **Node.js v18+**
 *   **Python 3.10+**
 
-### 2. Backend (Conda)
+### 2. Backend (Conda + Docker)
 ```bash
-# 가상환경 생성
-conda env create -f environment.yml
+# 1. 데이터베이스 실행 (Docker 필수, 종료 후에도 데이터 보존됨)
+docker-compose up -d
 
-# 가상환경 활성화
+# 2. 가상환경 생성 및 활성화
+conda env create -f environment.yml
 conda activate MACH_VII_v2.0
 
-# 서버 실행
+# 3. 시스템 실행
 python main.py
 ```
 > API: `http://localhost:8000`

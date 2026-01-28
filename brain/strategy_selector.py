@@ -1,6 +1,6 @@
 from typing import Dict, Any
-from policy.safe_policy import SafePolicy
-from policy.explore_policy import ExplorePolicy
+from strategy.safe_policy import SafePolicy
+from strategy.explore_policy import ExplorePolicy
 from memory.falkordb_manager import memory_manager
 import logging
 

@@ -1,7 +1,7 @@
 # brain/modules/robot/robot_factory.py
 
 import streamlit as st
-from core.pybullet_robot import PybulletRobot
+from embodiment.hardware.pybullet_robot import PybulletRobot
 
 class RobotFactory:
     """

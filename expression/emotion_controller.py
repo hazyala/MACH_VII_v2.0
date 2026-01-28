@@ -2,7 +2,7 @@ import threading
 import time
 import asyncio
 from typing import Dict
-from .emotion_state import EmotionVector
+from state.emotion_state import EmotionVector
 from shared.state_broadcaster import broadcaster
 
 class EmotionController:
