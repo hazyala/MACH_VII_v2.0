@@ -17,8 +17,8 @@ class YoloDetector:
         """
         입력 영상에서 물체를 찾아 명칭과 중심점 픽셀 좌표 리스트를 반환합니다.
         """
-        # 신뢰도(conf) 0.5 이상의 물체만 추출합니다.
-        results = self.model(frame, verbose=False, conf=0.5)
+        # 신뢰도(conf) 0.2 이상의 물체만 추출합니다.
+        results = self.model(frame, verbose=False, conf=0.2)
         
         detections = []
         if len(results[0].boxes) > 0:

@@ -1,5 +1,0 @@
-# 가상환경 활성화
-1. 경로로 이동 
-2. conda activate D:\ARMY\MACH_VII_v2.0\venv
-3. 실행 
-streamlit run interface/frontend/app.py

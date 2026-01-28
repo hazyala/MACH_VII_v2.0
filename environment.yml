@@ -5,25 +5,33 @@ channels:
 dependencies:
   - python=3.10
   - pip
-  # --- [콘다 직접 관리 부품: 충돌 방지용] ---
+  # --- [기본 수치 연산 및 시뮬레이션] ---
   - numpy=1.26.4
-  - packaging>=24.0   
   - scipy
   - pybullet
+  
   - pip:
-      # --- [조종석 및 0.2.x 지능] ---
-      - streamlit==1.30.0
-      - opencv-python==4.8.0.76
-      - ultralytics>=8.3.0
-      - pyrealsense2>=2.55.0
-      - langchain==0.2.14
-      - langchain-community==0.2.12
-      - langchain-core==0.2.43
-      - langsmith<0.2.0
-      - requests
-      - Pillow
-      - python-dotenv
+      # --- [Interface: 백엔드 및 통신] ---
       - fastapi
-      - uvicorn
+      - uvicorn[standard]
+      - websockets
       - python-socketio
-      - websocket-client
+      - python-dotenv
+      
+      # --- [Brain: 에이전트 및 로직] ---
+      - langchain
+      - langchain-community
+      - langchain-core
+      - requests
+      
+      # --- [Core: 비전 및 하드웨어] ---
+      - opencv-python
+      - ultralytics>=8.3.0
+      - pyrealsense2
+      - Pillow
+      
+      # --- [Memory: 데이터베이스] ---
+      - falkordb
+      
+      # --- [Frontend Build (Node.js required separately)] ---
+      # Node.js 패키지는 interface/frontend/package.json 참조
