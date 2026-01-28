@@ -9,15 +9,26 @@ const ControlPanel = () => {
     });
 
     const handleConfigChange = async (type, value) => {
-        setConfig(prev => ({ ...prev, [type]: value }));
-        try {
-            // Build payload
-            let query = `?`;
-            if (type === 'camera') query += `camera_source=${value}`;
-            if (type === 'robot') query += `robot_target=${value}`;
-            if (type === 'logic') query += `logic_mode=${value}`;
+        const newConfig = { ...config, [type]: value };
+        setConfig(newConfig);
 
-            await fetch(`http://localhost:8000/api/config${query}`, { method: 'POST' });
+        try {
+            // UserRequestDTO 규격에 맞춘 payload 구성
+            const payload = {
+                request_type: 'config_change',
+                config: {
+                    target_robot: newConfig.robot.toLowerCase() === 'dofbot' ? 'dofbot' : 'pybullet',
+                    active_camera: newConfig.camera.toLowerCase() === 'realsense' ? 'realsense' : 'pybullet',
+                    op_mode: newConfig.logic.toLowerCase() === 'memory' ? 'memory_based' : 'rule_based',
+                    is_emergency_stop: false
+                }
+            };
+
+            await fetch(`http://localhost:8000/api/request`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
         } catch (e) { console.error("Config Error", e); }
     };
 

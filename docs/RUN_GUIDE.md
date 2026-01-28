@@ -55,8 +55,7 @@ python main.py
 
 ### 3.1 경로 이동 및 의존성 설치
 ```bash
-cd embodiment/frontend  # (폴더 구조 재편 후 기준)
-# 현재는 interface/frontend 일 수 있음
+cd embodiment/frontend
 
 npm install
 ```

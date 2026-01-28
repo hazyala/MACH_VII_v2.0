@@ -6,44 +6,49 @@
 ## 📦 전체 디렉토리 트리 (Target Architecture)
 
 MACH_VII_v2.0/
-├── 📂 sensor/               # [Layer 1] 감각 계층 (Raw Data)
-│   ├── realsense_driver.py  # RealSense 카메라 드라이버
-│   ├── vision_base.py       # 비전 인터페이스
-│   └── pybullet_vision.py   # 시뮬레이션 비전
+├── 📂 sensor/               # [Layer 1] 감각 계층 (Perception)
+│   ├── perception_manager.py# 감각 수집 및 상태 업데이트 관리자
+│   ├── vision_bridge.py     # 하드웨어-AI 데이터 브릿지
+│   ├── realsense_driver.py  # RealSense 저수준 드라이버 (AI 제거)
+│   ├── realsense_vision.py  # RealSense 비전 구현체
+│   └── pybullet_vision.py   # 시뮬레이션 비전 구현체
 │
-├── 📂 state/                # [Layer 2] 상태 계층 (Single Source of Truth)
+├── 📂 state/                # [Layer 2] 상태 계층 (Truth)
 │   ├── system_state.py      # 전체 시스템 상태 (Root Object)
 │   └── emotion_state.py     # 감정 상태 컴포넌트
 │
-├── 📂 brain/                # [Layer 3] 판단 계층 (Decision/Intent)
+├── 📂 brain/                # [Layer 3] 판단 계층 (Decision)
 │   ├── logic_brain.py       # 로직 기반 판단 모듈
-│   └── emotion_updater.py   # LLM 기반 감정 업데이트
+│   ├── emotion_updater.py   # LLM 기반 감정 업데이트
+│   └── 📂 tools/            # [Tools] 에이전트 도구 (Flattened)
+│       ├── robot_action.py  # 로봇 제어 도구
+│       ├── vision_detect.py # 물체 탐지 도구
+│       └── vision_analyze.py# VLM 영상 분석 도구
 │
-├── 📂 strategy/             # [Layer 4] 전략 계층 (Filtering/Mode)
-│   ├── base_policy.py       # 행동 정책 인터페이스
-│   ├── safe_policy.py       # 안전 모드 정책
-│   └── explore_policy.py    # 탐험 모드 정책
+├── 📂 strategy/             # [Layer 4] 전략 계층 (Strategy)
+│   └── strategy_manager.py  # 전역 전략 컨텍스트 및 필터 관리자
 │
-├── 📂 expression/           # [Layer 5] 표현 계층 (Interpolation)
-│   └── emotion_controller.py# 감정/표정 제어 및 보간 (60Hz)
+├── 📂 expression/           # [Layer 5] 표현 계층 (Expression)
+│   └── emotion_controller.py# 감정/표정 제 프리파라미터 계산 (60Hz)
 │
-├── 📂 embodiment/           # [Layer 6] 구현 계층 (Action/Rendering)
-│   ├── 📂 frontend/         # React 웹 UI
-│   └── 📂 hardware/         # 로봇 하드웨어 제어
-│       ├── robot_base.py    # 로봇 인터페이스
-│       └── dofbot_robot.py  # 실제 로봇 드라이버
+├── 📂 embodiment/           # [Layer 6] 구현 계층 (Embodiment)
+│   ├── 📂 frontend/         # React 웹 UI (Dumb UI)
+│   ├── robot_controller.py  # 로봇 행동 통합 제어기
+│   ├── robot_factory.py     # 로봇 드라이버 생성 팩토리
+│   ├── robot_base.py        # 로봇 추상 인터페이스
+│   └── pybullet_robot.py    # 시뮬레이션 로봇 드라이버
 │
-├── 📂 memory/               # [Layer 7] 기억 계층 (DB)
-│   ├── falkordb_manager.py  # Graph DB 관리자
-│   └── 📂 data/             # [Persistence] DB 데이터 저장소 (Docker Volume)
+├── 📂 memory/               # [Layer 7] 기억 계층 (Memory)
+│   └── falkordb_manager.py  # Graph DB 관리자
 │
-├── 📂 shared/               # 공통 유틸리티 (경로 및 전역 설정 관리)
-│   ├── config.py            # [Central] PathConfig 및 시스템 설정
-│   └── ...
+├── 📂 shared/               # 공용 모듈
+│   ├── pipeline.py          # [Core] 7단계 단방향 파이프라인 매니저
+│   ├── config.py            # [Central] PathConfig 및 GlobalConfig
+│   └── state_broadcaster.py # [Sync] 상태 전파 이벤트 버스
 │
-├── 📂 interface/            # 외부 인터페이스
-│   └── 📂 backend/
-│       └── api_server.py    # FastAPI 백엔드 서버
+├── 📂 interface/            # 외부 인터페이스 (Interface)
+│   ├── api_server.py        # FastAPI API/WS 서버 (Flattened)
+│   └── pybullet_client.py   # 시뮬레이션 서버 통신 클라이언트
 │
 ├── main.py                  # [Root] 시스템 실행 진입점
 ├── docker-compose.yml       # [Conf] DB 컨테이너 설정

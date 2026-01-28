@@ -15,6 +15,7 @@ from sensor.perception_manager import perception_manager
 from .pybullet_client import pybullet_client
 from memory.falkordb_manager import memory_manager
 from strategy.strategy_manager import strategy_manager
+from shared.ui_dto import UserRequestDTO, UserRequestType, OperationMode, RobotTarget, CameraSource
 
 app = FastAPI()
 
@@ -76,45 +77,57 @@ async def websocket_endpoint(websocket: WebSocket):
         traceback.print_exc()
         print(f"WS Error: {e}")
 
-# API 엔드포인트: 작업 명령 (Task Command)
+# API 엔드포인트: 통합 명령 및 설정 (Unified Interface)
+@app.post("/api/request")
+async def handle_request(dto: UserRequestDTO, background_tasks: BackgroundTasks):
+    """
+    UI로부터의 모든 요청(명령, 설정 변경, 긴급정지)을 통합 처리합니다.
+    Strict Interface 원칙에 따라 UserRequestDTO 규격을 강제합니다.
+    """
+    
+    # 1. 텍스트 명령 처리
+    if dto.request_type == UserRequestType.COMMAND:
+        if dto.command:
+            background_tasks.add_task(logic_brain.execute_task, dto.command)
+            return {"status": "accepted", "type": "command", "payload": dto.command}
+    
+    # 2. 시스템 설정 변경 처리
+    elif dto.request_type == UserRequestType.CONFIG_CHANGE:
+        if dto.config:
+            # 카메라 소스 변경
+            realsense_driver.set_source(dto.config.active_camera)
+            if dto.config.active_camera == CameraSource.VIRTUAL:
+                pybullet_client.connect()
+            
+            # 사고 방식(Logic Mode) 변경 반영 (Strategy Layer 등에 전달 가능)
+            # strategy_manager.set_mode(dto.config.op_mode) 
+            
+            return {"status": "config_updated", "config": dto.config.dict()}
+            
+    # 3. 긴급 정지 처리
+    elif dto.request_type == UserRequestType.EMERGENCY:
+        from embodiment.robot_controller import robot_controller
+        robot_controller.robot_driver.emergency_stop()
+        broadcaster.publish("agent_thought", "[System] UI를 통한 긴급 정지가 발동되었습니다.")
+        return {"status": "emergency_stop_triggered"}
+
+    return {"status": "ignored", "reason": "invalid_request_combination"}
+
+# 레거시 지원을 위한 기존 엔드포인트 유지 (내부적으로 handle_request 호출로 전환 가능)
 @app.post("/api/command")
 async def post_command(command: str, background_tasks: BackgroundTasks):
-    # 브레인에게 작업을 위임합니다.
+    # 하위 호환성을 위해 유지
     background_tasks.add_task(logic_brain.execute_task, command)
     return {"status": "accepted", "command": command}
 
-# API 엔드포인트: 전략 컨텍스트 업데이트 (Layer 4)
-@app.post("/api/context")
-async def update_context(allow_explore: bool, risk_level: str):
-    # 브레인이 아닌 전략 매니저에게 직접 명령을 하달합니다.
-    strategy_manager.set_context(allow_explore=allow_explore, risk_level=risk_level)
-    return {"status": "updated", "context": {"allow_explore": allow_explore, "risk_level": risk_level}}
-
-# Video Streaming Endpoints
-@app.get("/video/rgb")
-def video_rgb(source: str = None):
-    return StreamingResponse(realsense_driver.generate_rgb_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
-
-@app.get("/video/depth")
-def video_depth():
-    return StreamingResponse(realsense_driver.generate_depth_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
-
-# Configuration Endpoint
 @app.post("/api/config")
 async def update_config(camera_source: str = None, robot_target: str = None, logic_mode: str = None):
+    # 하위 호환성을 위해 유지
     if camera_source:
         realsense_driver.set_source(camera_source)
         if camera_source == "PyBullet":
              pybullet_client.connect()
-    
-    return {
-        "status": "config_updated", 
-        "config": {
-            "camera": camera_source, 
-            "robot": robot_target, 
-            "logic": logic_mode
-        }
-    }
+    return {"status": "config_updated"}
 
 if __name__ == "__main__":
     import uvicorn

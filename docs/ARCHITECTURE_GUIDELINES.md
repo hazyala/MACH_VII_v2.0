@@ -29,13 +29,13 @@ graph LR
     Embodiment --> Memory
 ```
 
-1.  **Sensor (감각)**: "무엇이 보이는가?" (Raw Data)
-2.  **State (상태)**: "나는 지금 어떤 상황인가?" (Context)
-3.  **Brain (판단)**: "무엇을 하고 싶은가?" (Intent)
-4.  **Strategy (전략)**: "내 성격에 이게 맞는가?" (Filtering)
-5.  **Expression (표현)**: "어떻게 움직일 것인가?" (Physics/Animation)
-6.  **Embodiment (구현)**: "실제로 보여주자." (Rendering)
-7.  **Memory (기억)**: "결과는 어땠는가?" (Learning)
+1.  **Sensor (감각)**: "무엇이 보이는가?" (PerceptionManager)
+2.  **State (상태)**: "나는 지금 어떤 상황인가?" (SystemState)
+3.  **Brain (판단)**: "무엇을 하고 싶은가?" (LogicBrain/Tools)
+4.  **Strategy (전략)**: "내 성격에 이게 맞는가?" (StrategyManager)
+5.  **Expression (표현)**: "어떻게 움직일 것인가?" (EmotionController)
+6.  **Embodiment (구현)**: "실제로 보여주자." (RobotController/Frontend)
+7.  **Memory (기억)**: "결과는 어땠는가?" (FalkorDB)
 
 ---
 

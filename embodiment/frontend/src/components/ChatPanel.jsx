@@ -23,10 +23,16 @@ const ChatPanel = () => {
         if (!input.trim()) return;
 
         try {
-            // Optimistic update (backend will echo back via store)
-            // But we trust backend to be source of truth.
-            await fetch(`http://localhost:8000/api/command?command=${encodeURIComponent(input)}`, {
-                method: 'POST'
+            // UserRequestDTO (COMMAND 타입) 준수
+            const payload = {
+                request_type: 'command',
+                command: input
+            };
+
+            await fetch(`http://localhost:8000/api/request`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
             setInput('');
         } catch (e) {

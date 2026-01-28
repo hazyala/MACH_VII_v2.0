@@ -106,18 +106,19 @@
 
 ```
 MACH_VII_v2.0/
-├── sensor/          # [Layer 1] 감각 수집 (RealSense, Mic)
+├── sensor/          # [Layer 1] 감각 수집 (PerceptionManager, Drivers)
 ├── state/           # [Layer 2] 상태 정의 (SystemState, Emotion)
 ├── brain/           # [Layer 3] 판단 및 로직 (LogicBrain, LLM)
-├── strategy/        # [Layer 4] 전략 및 성향 (Policy, Persona)
+│   └── tools/       # [Tools] 에이전트 가용 도구 (Flattened)
+├── strategy/        # [Layer 4] 전략 및 성향 (StrategyManager)
 ├── expression/      # [Layer 5] 표현 엔진 (EmotionController)
-├── embodiment/      # [Layer 6] 구현 계층
-│   ├── frontend/    # [View] React Face UI
-│   └── hardware/    # [HW] Robot Drivers
+├── embodiment/      # [Layer 6] 구현 계층 (Drivers, Flattened)
+│   └── frontend/    # [View] React Face UI (Dumb UI)
 ├── memory/          # [Layer 7] 기억 및 로그 (FalkorDB)
-├── shared/          # 공용 모듈 (경로 및 설정 관리)
-├── data/            # [NEW] 모델, 로그 등 데이터 저장소
-├── docs/            # 문서
+├── shared/          # 공용 모듈 (Pipeline, Config, Broadcaster)
+├── interface/       # 외부 인터페이스 (api_server, Flattened)
+├── data/            # 모델, 로그 등 데이터 저장소
+├── docs/            # 설계 및 운영 문서
 ├── main.py          # [Entry] 시스템 진입점
 ├── docker-compose.yml # [DB] FalkorDB 실행 설정
 └── environment.yml  # [Env] Conda 환경 설정
