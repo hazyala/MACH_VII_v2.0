@@ -99,10 +99,11 @@ def grasp_object(object_name: str = "물체") -> str:
         
         obj_name = target['name']
         obj_pos = target['position']
+        obj_bbox = target.get('bbox', (0, 0))
         logging.info(f"[GraspTool] 목표 물체: {obj_name} at ({obj_pos['x']:.1f}, {obj_pos['y']:.1f}, {obj_pos['z']:.1f})cm")
         
-        # 3. GPD로 그립 자세 계산
-        grasp_pose = grasp_planner.compute_grasp_pose(obj_name, obj_pos)
+        # 3. GPD로 그립 자세 계산 (범용 로직 적용)
+        grasp_pose = grasp_planner.compute_grasp_pose(obj_name, obj_pos, bbox=obj_bbox)
         
         # 4. 그리퍼 열기
         robot_controller.robot_driver.move_gripper(grasp_pose['gripper_width'])
@@ -135,15 +136,33 @@ def grasp_object(object_name: str = "물체") -> str:
         success = visual_servoing.servoing_loop(
             target_position=grasp_pos,
             get_ee_position=get_ee_pos,
-            move_robot=move_robot
+            move_robot=move_robot,
+            max_iterations=50, # 정밀 접근을 위해 충분한 횟수
+            tolerance_cm=0.3   # 매우 정밀하게 (0.3cm)
         )
         
         if not success:
             return f"[실패] {obj_name}을(를) 정확히 잡지 못했습니다."
         
-        # 7. 그리퍼 닫기
+        # 6.5 [검증] 파지 전 Vision Analysis 확인 (사용자 요청)
+        logging.info("[GraspTool] 파지 전 상태 검증 중...")
+        from .vision_analyze import vision_analyze
+        
+        verify_query = "지금 로봇의 그리퍼가 물체(kite)를 잡을 수 있는 위치에 있나요? "\
+                       "그리퍼 사이에 물체가 위치해 있다면 'YES', 아니면 'NO'라고 답해주세요."
+        verify_result = vision_analyze.invoke({"query": verify_query})
+        logging.info(f"[GraspTool] 파지 검증 결과: {verify_result}")
+        
+        if "NO" in verify_result.upper() and "YES" not in verify_result.upper():
+             logging.warning("[GraspTool] 검증 실패: 그리퍼 위치가 적절하지 않을 수 있습니다.")
+             # 그래도 일단 시도는 해보거나, 여기서 중단할지 결정. 
+             # 현재는 경고만 하고 진행.
+        
+        # 7. 그리퍼 닫기 (강력하게 잡기 위해 힘 증가)
+        # 기본 힘보다 훨씬 강하게 설정하여 가장자리 파지 시 미끄러짐 방지
+        robot_controller.robot_driver.set_force(500.0) 
         robot_controller.robot_driver.move_gripper(0)
-        logging.info("[GraspTool] 그리퍼 닫기 - 물체 파지 완료")
+        logging.info("[GraspTool] 그리퍼 닫기 (Max Force) - 물체 파지 완료")
         
         # 8. 약간 들어올리기
         current_pos = robot_controller.robot_driver.get_current_pose()

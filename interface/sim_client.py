@@ -29,6 +29,22 @@ class PyBulletClient:
         self.sio.on('object_state', self.on_object_state)
         
         self.initialized = True
+        
+        # [명령 지속 전송] PyBullet 서버가 명령을 즉시 삭제하므로 클라이언트에서 지속적으로 보내야 함
+        self.current_target_pos = None
+        self.running = True
+        self.pos_sender_thread = threading.Thread(target=self._pos_sender_loop, daemon=True)
+        self.pos_sender_thread.start()
+
+    def _pos_sender_loop(self):
+        """백그라운드에서 주기적으로 목표 위치 명령을 재전송합니다."""
+        while self.running:
+            if self.connected and self.current_target_pos is not None:
+                try:
+                    self.sio.emit('set_pos', {'pos': self.current_target_pos})
+                except Exception:
+                    pass
+            time.sleep(0.02)  # 50Hz 전송
 
     def connect(self, timeout=2):
         if self.connected: return
@@ -64,10 +80,17 @@ class PyBulletClient:
         if not self.connected: return
         self.sio.emit('set_joints', {'joints': joints})
 
+    def set_force(self, force: float):
+        """ 로봇 모터/그리퍼 힘 설정 """
+        if not self.connected: return
+        self.sio.emit('set_force', {'force': force})
+
     def set_pos(self, pos: list):
         """ pos: [x, y, z] """
         if not self.connected: return
+        # 즉시 전송 및 지속 전송 활성화
         self.sio.emit('set_pos', {'pos': pos})
+        self.current_target_pos = pos
 
     def set_gripper(self, value: float):
         """ value: 0.0 ~ 0.06 """

@@ -76,8 +76,8 @@ class VisionBridge:
         for i, det in enumerate(raw_detections):
             u, v = det["pixel_center"]
             
-            # 3. 해당 픽셀의 깊이 정보(실제 미터)를 가져와 3D 좌표로 변환합니다.
-            # PyBullet 서버가 이미 z-buffer → depth_m 변환을 수행함
+            # 3. 해당 픽셀의 깊이 정보(실제 미터)를 가져옵니다
+            # PyBullet 서버가 이미 선형화를 완료함
             depth_m = depth_frame[v, u] if v < depth_frame.shape[0] and u < depth_frame.shape[1] else 0
             
             logging.info(f"[VisionBridge] 물체 #{i} '{det['name']}': "
@@ -118,6 +118,7 @@ class VisionBridge:
                         "y": round(robot_y, 2),
                         "z": round(robot_z, 2)
                     },
+                    "bbox": det.get("bbox", (0, 0)),
                     "sync_pose": captured_pose
                 })
             else:

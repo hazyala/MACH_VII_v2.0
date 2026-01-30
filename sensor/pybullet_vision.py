@@ -17,15 +17,15 @@ class PybulletVision(VisionBase):
         
     def pixel_to_cm(self, u: int, v: int, depth_val: float):
         """
-        픽셀 좌표를 3D 월드 좌표(cm)로 변환합니다.
-        pybullet_projection 모듈의 정확한 역투영 사용.
+        픽셀 좌표를 3D 카메라 좌표(cm)로 변환합니다.
+        pybullet_projection 모듈의 V1.0 방식 사용.
         
         Args:
             u, v: 픽셀 좌표
-            depth_val: Z-buffer 값 (0~1)
+            depth_val: 실제 깊이 (미터, PyBullet 서버에서 선형화 완료)
         
         Returns:
-            [x, y, z]: 월드 좌표 cm 리스트 (칼만 필터 적용 후)
+            [x, y, z]: 카메라 좌표 cm 리스트 (칼만 필터 적용 후)
         """
         if depth_val <= 0:
             return None

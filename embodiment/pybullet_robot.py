@@ -56,6 +56,20 @@ class PybulletRobot(RobotBase):
         except Exception as e:
             logging.error(f"[PybulletRobot] 그리퍼 동작 실패: {e}")
             return False
+        
+    def set_force(self, force: float) -> bool:
+        """
+        로봇의 모터 및 그리퍼 구동 힘을 설정합니다.
+        Args:
+            force: 힘의 크기 (단위: N 또는 시뮬레이션 단위)
+        """
+        try:
+            pybullet_client.set_force(force)
+            logging.info(f"[PybulletRobot] 구동 힘 설정: {force}")
+            return True
+        except Exception as e:
+            logging.error(f"[PybulletRobot] 힘 설정 실패: {e}")
+            return False
 
     def get_current_pose(self) -> dict:
         """

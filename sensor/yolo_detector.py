@@ -42,10 +42,12 @@ class YoloDetector:
                 # 중심점 좌표(u, v) 계산 (xywh 포맷 사용)
                 xywh = box.xywh[0].cpu().numpy()
                 u, v = int(xywh[0]), int(xywh[1])
+                w, h = int(xywh[2]), int(xywh[3])
                 
                 detections.append({
                     "name": name,
-                    "pixel_center": (u, v)
+                    "pixel_center": (u, v),
+                    "bbox": (w, h)
                 })
         
         return detections
