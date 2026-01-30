@@ -24,6 +24,19 @@ class RobotController:
         # 구독 시작
         broadcaster.subscribe(self.on_intent_received)
         
+    def switch_robot(self, target: str):
+        """실시간으로 제어 대상 로봇을 전환합니다 (pybullet / dofbot)"""
+        from shared.config import GlobalConfig
+        from shared.ui_dto import RobotTarget
+        
+        with self.lock:
+            # 설정 값 업데이트
+            GlobalConfig.SIM_MODE = (target == RobotTarget.VIRTUAL)
+            # 신규 드라이버 획득
+            self.robot_driver = RobotFactory.get_robot()
+            
+        print(f"[RobotController] 로봇 전환 완료: {target} (SIM_MODE={GlobalConfig.SIM_MODE})")
+        
     def start(self):
         if self.running: return
         self.running = True

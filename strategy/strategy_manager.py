@@ -39,6 +39,12 @@ class StrategyManager:
         
         print(f"[Strategy] 컨텍스트 업데이트: {self.context}")
 
+    def set_mode(self, mode: str):
+        """사고 방식(Operation Mode)을 전환합니다."""
+        from shared.ui_dto import OperationMode
+        self.context["op_mode"] = mode
+        print(f"[Strategy] 사고 모드 전환 완료: {mode}")
+
     def get_context(self) -> Dict[str, Any]:
         """현재 적용 중인 전략적 맥락을 반환합니다."""
         with self._lock:

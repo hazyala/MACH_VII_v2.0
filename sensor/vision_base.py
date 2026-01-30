@@ -30,23 +30,30 @@ class VisionBase(ABC):
 
     def pixel_to_cm(self, u: float, v: float, depth_m: float) -> Optional[List[float]]:
         """
-        핀홀 카메라 모델을 사용하여 2D 픽셀을 3D cm 좌표로 변환합니다.
-        파이불렛 서버의 미터(m) 단위를 센티미터(cm)로 변환하여 계산합니다.
+        픽셀 좌표를 3D cm 좌표로 변환합니다.
+        V1.0의 비례 계산 방식을 사용하여 카메라 회전을 자동 보정합니다.
         """
         if depth_m <= 0:
             return None
 
-        # 미터 단위를 센티미터로 변환 (1m = 100cm)
-        z_cm = depth_m * 100.0
+        # PyBullet 카메라 설정값
+        WIDTH, HEIGHT = 600, 480
         
-        # 핀홀 카메라 역투영 공식 적용
-        x_cm = (u - self.cx) * z_cm / self.fx
-        y_cm = (v - self.cy) * z_cm / self.fy
+        # V1.0 방식: 비례 계산 (카메라 회전 자동 보정)
+        z_cm = depth_m * 100.0  # m → cm
+        x_cm = (u - WIDTH / 2) * (z_cm / WIDTH)
+        y_cm = (v - HEIGHT / 2) * (z_cm / HEIGHT)
 
         # 3D 좌표에 칼만 필터 적용
         filtered_x = self.filter_x.update(x_cm)
         filtered_y = self.filter_y.update(y_cm)
         filtered_z = self.filter_z.update(z_cm)
+        
+        import logging
+        logging.info(f"[VisionBase.pixel_to_cm] "
+                    f"픽셀=({u}, {v}), depth={depth_m:.4f}m → "
+                    f"비례계산=({x_cm:.2f}, {y_cm:.2f}, {z_cm:.2f})cm → "
+                    f"필터=({filtered_x:.2f}, {filtered_y:.2f}, {filtered_z:.2f})cm")
 
         return [filtered_x, filtered_y, filtered_z]
 

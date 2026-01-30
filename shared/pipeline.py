@@ -107,7 +107,11 @@ class SystemPipeline:
             "brain": broadcaster.get_snapshot(),
             "emotion": self.components.get("emotion_controller").get_current_emotion(),
             "perception": system_state.perception_data,
-            "robot": system_state.robot,
+            "robot": {
+                "is_moving": system_state.robot.is_moving,
+                "battery": system_state.robot.battery_level,
+                "mode": system_state.robot.current_mode
+            },
             "strategy": strategy_manager.get_context(),
             "timestamp": time.time()
         }

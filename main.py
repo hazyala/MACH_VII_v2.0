@@ -1,8 +1,15 @@
 import uvicorn
 import os
 import sys
+import logging
 
 from shared.config import PathConfig
+
+# 로깅 설정 (프로그램 시작 시 가장 먼저)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s:%(name)s:%(message)s'
+)
 
 # 프로젝트 루트를 Python Path에 추가
 BASE_DIR = PathConfig.BASE_DIR

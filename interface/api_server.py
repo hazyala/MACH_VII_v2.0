@@ -12,7 +12,7 @@ from expression.emotion_controller import emotion_controller
 from brain.emotion_updater import llm_updater
 from sensor.realsense_driver import realsense_driver
 from sensor.perception_manager import perception_manager
-from .pybullet_client import pybullet_client
+from interface.sim_client import pybullet_client
 from memory.falkordb_manager import memory_manager
 from strategy.strategy_manager import strategy_manager
 from shared.ui_dto import UserRequestDTO, UserRequestType, OperationMode, RobotTarget, CameraSource
@@ -94,13 +94,15 @@ async def handle_request(dto: UserRequestDTO, background_tasks: BackgroundTasks)
     # 2. 시스템 설정 변경 처리
     elif dto.request_type == UserRequestType.CONFIG_CHANGE:
         if dto.config:
-            # 카메라 소스 변경
-            realsense_driver.set_source(dto.config.active_camera)
-            if dto.config.active_camera == CameraSource.VIRTUAL:
-                pybullet_client.connect()
+            # [Layer 1] 카메라 소스 변경
+            perception_manager.bridge.switch_source(dto.config.active_camera)
             
-            # 사고 방식(Logic Mode) 변경 반영 (Strategy Layer 등에 전달 가능)
-            # strategy_manager.set_mode(dto.config.op_mode) 
+            # [Layer 6] 로봇 대상 변경
+            from embodiment.robot_controller import robot_controller
+            robot_controller.switch_robot(dto.config.target_robot)
+            
+            # [Layer 4] 사고 방식(Logic Mode) 변경 반영
+            strategy_manager.set_mode(dto.config.op_mode) 
             
             return {"status": "config_updated", "config": dto.config.dict()}
             

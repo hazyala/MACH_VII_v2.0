@@ -3,6 +3,7 @@ import uuid
 import asyncio
 from typing import Dict, Any
 
+from shared.config import GlobalConfig
 from shared.state_broadcaster import broadcaster
 from .tools import ALL_TOOLS
 from .prompts import SYSTEM_INSTRUCTION
@@ -53,13 +54,23 @@ class LogicBrain:
         # 1. LLM 초기화 (Ollama)
         try:
             self.llm = ChatOllama(
-                model="gemma3:27b", 
-                base_url="http://ollama.aikopo.net",
+                model=GlobalConfig.VLM_MODEL, 
+                base_url=GlobalConfig.VLM_ENDPOINT.replace("/api/generate", ""), # base_url은 /api/generate 제외
                 temperature=0.0
-            ) 
-        except:
-             # Fallback
-             self.llm = ChatOllama(model="llama3", temperature=0)
+            )
+            # 간단한 호출로 연결 테스트
+            # self.llm.invoke("test") # 실가동 시에는 생략 가능 (시간 단축)
+        except Exception as e:
+             print(f"[Brain] 메인 VLM 연결 실패: {e}")
+             # Fallback to local Ollama (Llama 3 or similar)
+             try:
+                 print("[Brain] 로컬 Ollama(llama3)로 전환을 시도합니다...")
+                 self.llm = ChatOllama(model="llama3", temperature=0)
+             except Exception as fe:
+                 print(f"[Brain] 모든 LLM 초기화 실패: {fe}")
+                 print("[IMPORTANT] Ollama가 설치되어 있고 모델이 다운로드 되었는지 확인하세요.")
+                 # 극단적인 경우 에러를 발생시키지 않고 빈 모델 객체를 유지하거나 더미 클래스 사용
+                 self.llm = None
 
         # 2. 메모리 초기화 (단순화를 위해 ConversationBufferMemory 사용)
         self.memory = ConversationBufferMemory(

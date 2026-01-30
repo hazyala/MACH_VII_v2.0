@@ -1,0 +1,35 @@
+# 맹칠이 (MACH VII_v1.0) 가상환경 구축
+
+name: mach_vii_v1.0_env
+
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      # --- UI 및 실시간 갱신 도구 ---
+      - streamlit==1.31.0 
+      - streamlit-autorefresh
+
+      # --- 핵심 프레임워크 (안정화 버전) ---
+      - langchain<0.2.0
+      - langchain-community<0.2.0
+
+      # --- 비전 및 수치 연산 (엄격 준수) ---
+      - numpy<2.0.0
+      - opencv-python<4.9.0
+      - ultralytics>=8.3.0
+      - pyrealsense2>=2.55.0
+
+      # --- 웹 소켓 통신 ---
+      - python-socketio
+      - websocket-client
+      - flask-socketio
+
+      # --- 기타 유틸리티 ---
+      - requests
+      - Pillow
+      - falkordb
+      - transformers

@@ -21,6 +21,16 @@ class GlobalConfig:
     # 로봇(Robot) 및 센서(Sensor) 설정
     ROBOT_IP = "192.168.0.100"     # DOFBOT IP 주소
     CAMERA_FPS = 30
+
+class CameraConfig:
+    """카메라 설치 위치 및 오프셋 설정 클래스입니다."""
+    # 시뮬레이션 환경 (PyBullet) 오프셋
+    # PyBullet 카메라 위치: cameraEyePosition=[0.5, 0, 0.5] (m 단위)
+    # → cm 단위로 변환: X=50cm, Y=0cm, Z=50cm
+    SIM_OFFSET = {"x": 50.0, "y": 0.0, "z": 50.0}  # cm 단위
+    
+    # 실물 환경 (Intel RealSense) 오프셋
+    REAL_OFFSET = {"x": 30.0, "y": 0.0, "z": 20.0}
     
 class PathConfig:
     """pathlib을 사용한 경로 관리 클래스입니다."""

@@ -1,3 +1,5 @@
+# test.py
+
 import cv2
 import requests
 import json
@@ -5,141 +7,141 @@ import threading
 import time
 import numpy as np
 import websocket
+import sys
+from shared.ui_dto import (
+    UserRequestDTO, UserRequestType, SystemConfigurationDTO, 
+    RobotTarget, CameraSource, OperationMode
+)
 
 # 서버 설정
 SERVER_URL = "http://localhost:8000"
 WS_URL = "ws://localhost:8000/ws"
 
-class MachTestClient:
+class MachTermClient:
     def __init__(self):
         self.running = True
-        self.latest_rgb = None
         self.latest_emotion = "IDLE"
-        self.thought_log = []
+        self.current_config = SystemConfigurationDTO(
+            target_robot=RobotTarget.VIRTUAL,
+            active_camera=CameraSource.VIRTUAL,
+            op_mode=OperationMode.RULE_BASED
+        )
+        self.mode = "MENU" # MENU or CHAT
         
     def video_stream_thread(self):
-        """MJPEG 스트림을 수신하여 OpenCV 창에 표시합니다."""
-        print("[Video] 스트림 수신 시작...")
-        cap = cv2.VideoCapture(f"{SERVER_URL}/video/rgb")
-        while self.running:
-            ret, frame = cap.read()
-            if not ret:
-                time.sleep(0.1)
-                continue
-            
-            # 화면 크기 조정
-            display_frame = cv2.resize(frame, (640, 480))
-            
-            # 오버레이 정보 추가 (상태 표시)
-            cv2.putText(display_frame, f"Emotion: {self.latest_emotion}", (20, 40), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-            
-            cv2.imshow("MACH-VII v2.0 - Vision Feed", display_frame)
-            
-            # 간단한 '표정' 창 (OpenCV로 도형 그리기)
-            self.draw_face()
-            
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                self.running = False
-                break
-        cap.release()
-        cv2.destroyAllWindows()
-
-    def draw_face(self):
-        """현재 감정 상태에 기반한 간단한 표정을 별도 창에 그립니다."""
-        face_img = np.zeros((300, 300, 3), dtype=np.uint8)
-        color = (255, 255, 255) # White
-        
-        # 감정에 다른 색상/모양 (예시)
-        if self.latest_emotion == "HAPPY": color = (0, 255, 255)
-        elif self.latest_emotion == "SAD": color = (255, 0, 0)
-        elif self.latest_emotion == "ANGRY": color = (0, 0, 255)
-        
-        # 눈 그리기
-        cv2.circle(face_img, (100, 100), 20, color, -1)
-        cv2.circle(face_img, (200, 100), 20, color, -1)
-        
-        # 입 그리기 (상태에 따라 모양 변경 가능)
-        cv2.line(face_img, (100, 200), (200, 200), color, 5)
-        
-        cv2.imshow("MACH-VII v2.0 - Face", face_img)
+        """MJPEG 스트림을 수신하여 표시합니다 (interface/api_server.py의 스트리밍 엔드포인트 가정)"""
+        # 참고: 현재 api_server.py에는 비디오 엔드포인트가 명시적이지 않을 수 있으나 
+        # realsense_driver나 sim_client의 제너레이터를 사용할 수 있습니다.
+        # 여기서는 UI 구성에 집중하여 비디오는 연결 시도만 합니다.
+        pass
 
     def ws_listener_thread(self):
-        """WebSocket을 통해 브레인의 사고 과정 및 상태 정보를 실시간 수신합니다."""
+        """실시간 상태 및 사고 과정 수신"""
         def on_message(ws, message):
             data = json.loads(message)
-            
-            # 감정 업데이트
-            new_emotion = data.get("emotion", {}).get("current", "IDLE")
-            if new_emotion != self.latest_emotion:
-                self.latest_emotion = new_emotion
-            
-            # 사고(Thought) 및 답변(Bot) 출력
-            brain_state = data.get("brain", {})
-            chat_history = brain_state.get("chat_history", [])
-            
-            if chat_history:
-                last_msg = chat_history[-1]
-                msg_id = last_msg.get("id") or str(last_msg) # 중복 출력 방지용 ID
-                
-                if not hasattr(self, '_last_msg_id') or self._last_msg_id != msg_id:
-                    self._last_msg_id = msg_id
-                    role = last_msg.get("role")
-                    text = last_msg.get("text")
-                    
-                    if role == "thought":
-                        print(f"\n\033[92m[THOUGHT]\033[0m {text}")
-                    elif role == "bot":
-                        print(f"\n\033[93m[BOT]\033[0m {text}")
-                        # 답변이 오면 다시 프롬프트 출력
-                        print("\033[94m[COMMAND]\033[0m >> ", end="", flush=True)
+            # 사고 과정(Thought) 출력
+            thought = data.get("last_thought")
+            if thought:
+                print(f"\r\033[92m[BRAIN]\033[0m {thought}\n\033[94m[CHAT]\033[0m >> ", end="", flush=True)
 
-        def on_error(ws, error):
-            pass # 조용한 오류 처리
-
-        ws = websocket.WebSocketApp(WS_URL, on_message=on_message, on_error=on_error)
+        ws = websocket.WebSocketApp(WS_URL, on_message=on_message)
         ws.run_forever()
 
-    def terminal_input_thread(self):
-        """사용자로부터 터미널 명령을 입력받아 백엔드로 전송합니다."""
+    def show_menu(self):
+        """설정 선택 메뉴 표시"""
         print("\n" + "="*50)
-        print("   MACH-VII v2.0 Terminal Test Client (PyBullet Default)")
-        print("   - 'q' 입력 시 종료")
-        print("   - 모든 명령과 채팅을 지원합니다.")
-        print("="*50 + "\n")
+        print("   🤖 MACH-VII v2.0 Terminal Setup")
+        print("="*50)
         
-        # 시작 시 백엔드 설정을 PyBullet으로 강제 전환
-        try:
-            requests.post(f"{SERVER_URL}/api/config", params={"camera_source": "PyBullet"})
-            print("[System] PyBullet 모드로 초기화되었습니다.")
-        except:
-            print("[Warning] 서버 연결 실패. 서버가 실행 중인지 확인하세요.")
+        # 1. 로봇 선택
+        print("\n[1] 로봇 대상 (Robot Target)")
+        print(f"   1. Virtual (PyBullet) {'<--' if self.current_config.target_robot == RobotTarget.VIRTUAL else ''}")
+        print(f"   2. Physical (Dofbot) {'<--' if self.current_config.target_robot == RobotTarget.PHYSICAL else ''}")
+        
+        # 2. 카메라 선택
+        print("\n[2] 카메라 소스 (Camera Source)")
+        print(f"   1. Virtual (PyBullet) {'<--' if self.current_config.active_camera == CameraSource.VIRTUAL else ''}")
+        print(f"   2. Real (RealSense) {'<--' if self.current_config.active_camera == CameraSource.REAL else ''}")
+        
+        # 3. 사고 모드 선택
+        print("\n[3] 사고 방식 (Operation Mode)")
+        print(f"   1. Rule-Based {'<--' if self.current_config.op_mode == OperationMode.RULE_BASED else ''}")
+        print(f"   2. Memory-Based (LLM) {'<--' if self.current_config.op_mode == OperationMode.MEMORY_BASED else ''}")
+        
+        print("\n" + "-"*50)
+        print("   S. 설정 적용 및 채팅 시작")
+        print("   Q. 종료")
+        print("-"*50)
 
-        while self.running:
-            cmd = input("\033[94m[COMMAND]\033[0m >> ")
-            if cmd.lower() == 'q':
-                self.running = False
-                break
-            
-            if cmd.strip():
-                try:
-                    requests.post(f"{SERVER_URL}/api/command", params={"command": cmd})
-                except Exception as e:
-                    print(f"[Error] 전송 실패: {e}")
+    def send_config(self):
+        """현재 설정을 서버에 전송"""
+        print(f"\n[System] 설정 적용 중: {self.current_config.dict()}")
+        req = UserRequestDTO(
+            request_type=UserRequestType.CONFIG_CHANGE,
+            config=self.current_config
+        )
+        try:
+            res = requests.post(f"{SERVER_URL}/api/request", json=req.dict())
+            if res.status_code == 200:
+                print("✅ 설정이 성공적으로 업데이트되었습니다.")
+                return True
+            else:
+                print(f"❌ 설정 업데이트 실패: {res.text}")
+        except Exception as e:
+            print(f"❌ 서버 연결 오류: {e}")
+        return False
+
+    def send_command(self, text):
+        """자연어 명령 전송"""
+        req = UserRequestDTO(
+            request_type=UserRequestType.COMMAND,
+            command=text
+        )
+        try:
+            requests.post(f"{SERVER_URL}/api/request", json=req.dict())
+        except Exception as e:
+            print(f"\n❌ 명령 전송 실패: {e}")
 
     def run(self):
-        # 3개의 스레드 실행
-        t1 = threading.Thread(target=self.video_stream_thread, daemon=True)
-        t2 = threading.Thread(target=self.ws_listener_thread, daemon=True)
-        
-        t1.start()
-        t2.start()
-        
-        # 메인 스레드에서 입력 대기
-        self.terminal_input_thread()
-        self.running = False
-        print("테스트 클라이언트를 종료합니다.")
+        # WS 리스너 시작
+        threading.Thread(target=self.ws_listener_thread, daemon=True).start()
+
+        while self.running:
+            if self.mode == "MENU":
+                self.show_menu()
+                choice = input("\n선택 (번호): ").lower()
+                
+                if choice == '1':
+                    sub = input(" 로봇 (1. 가상, 2. 실물): ")
+                    self.current_config.target_robot = RobotTarget.VIRTUAL if sub == '1' else RobotTarget.PHYSICAL
+                elif choice == '2':
+                    sub = input(" 카메라 (1. 가상, 2. 실물): ")
+                    self.current_config.active_camera = CameraSource.VIRTUAL if sub == '1' else CameraSource.REAL
+                elif choice == '3':
+                    sub = input(" 모드 (1. 규칙, 2. 메모리): ")
+                    self.current_config.op_mode = OperationMode.RULE_BASED if sub == '1' else OperationMode.MEMORY_BASED
+                elif choice == 's':
+                    if self.send_config():
+                        self.mode = "CHAT"
+                        print("\n" + "*"*50)
+                        print("   채팅 모드에 진입했습니다.")
+                        print("   - 메뉴로 돌아가려면 '0' 입력")
+                        print("   - 종료하려면 'q' 입력")
+                        print("*"*50 + "\n")
+                elif choice == 'q':
+                    self.running = False
+                
+            elif self.mode == "CHAT":
+                cmd = input("\033[94m[CHAT]\033[0m >> ")
+                if cmd.lower() == 'q':
+                    self.running = False
+                elif cmd == '0':
+                    self.mode = "MENU"
+                elif cmd.strip():
+                    self.send_command(cmd)
+
+        print("\n테스트 클라이언트를 종료합니다.")
 
 if __name__ == "__main__":
-    client = MachTestClient()
+    client = MachTermClient()
     client.run()
