@@ -4,20 +4,23 @@ import Mouth from './Mouth';
 import { motion } from 'framer-motion';
 
 const FaceRenderer = ({
-    eyeOpenness = 1.0,  // 0.0 to 1.0
-    mouthCurve = 0,     // -100 to 100
-    mouthOpenness = 0,  // 0 to 100
-    eyeSqueeze = 0,     // 0.0 to 1.0
-    gazeX = 0,          // -50 to 50
-    gazeY = 0,          // -50 to 50
+    eyeOpenness = 1.0,
+    mouthCurve = 0,
+    mouthOpenness = 0,
+    mouthX = 0,
+    mouthY = 0,
+    eyeSqueeze = 0,
+    eyeSmile = 0,
+    gazeX = 0,
+    gazeY = 0,
     color = "#FFFFFF",
     glowIntensity = 0.5,
-    isAlive = true      // Enable liveness (blinking, breathing)
+    isAlive = true
 }) => {
     const CANVAS_SIZE = 400;
 
     // -- Liveness State --
-    const [blinkState, setBlinkState] = useState(1.0); // 1 = open, 0 = closed
+    const [blinkState, setBlinkState] = useState(1.0);
     const [jitter, setJitter] = useState({ x: 0, y: 0 });
 
     // 1. Blinking Logic
@@ -26,10 +29,9 @@ const FaceRenderer = ({
 
         let timeout;
         const triggerBlink = () => {
-            setBlinkState(0); // Close
-            setTimeout(() => setBlinkState(1), 150); // Open after 150ms
+            setBlinkState(0);
+            setTimeout(() => setBlinkState(1), 150);
 
-            // Schedule next blink (Random interval between 2s and 6s)
             const nextInterval = Math.random() * 4000 + 2000;
             timeout = setTimeout(triggerBlink, nextInterval);
         };
@@ -43,9 +45,8 @@ const FaceRenderer = ({
         if (!isAlive) return;
 
         const interval = setInterval(() => {
-            // Very small random movements
             setJitter({
-                x: (Math.random() - 0.5) * 2, // +/- 1px
+                x: (Math.random() - 0.5) * 2,
                 y: (Math.random() - 0.5) * 2
             });
         }, 500);
@@ -53,55 +54,59 @@ const FaceRenderer = ({
         return () => clearInterval(interval);
     }, [isAlive]);
 
-    // Calculate final eye scale (User input * Blink factor)
-    // If eyeOpenness is 0 (closed by user), blink shouldn't open it.
+    // Calculations
     const finalEyeScale = eyeOpenness * blinkState;
 
-    // Eye Positions (Base + Gaze + Jitter)
-    // Left Eye Base: 110, 160
-    // Right Eye Base: 290, 160
+    // Coordinates (Base + User Offset)
+    // Eye Y: 160 + 15 (Reference + Offset) = 175
     const leftEyeX = 110 + gazeX + jitter.x;
     const rightEyeX = 290 + gazeX + jitter.x;
-    const eyeY = 160 + gazeY + jitter.y;
+    const eyeY = 175 + gazeY + jitter.y;
 
-    // Mouth Position (Base + Jitter)
-    const mouthX = 200 + (gazeX * 0.3) + jitter.x; // Mouth moves less than eyes for 3D effect
-    const mouthY = 280 + (gazeY * 0.3) + jitter.y;
+    const mouthXPos = 200 + (gazeX * 0.3) + jitter.x + mouthX;
+    const mouthYPos = 260 + (gazeY * 0.3) + jitter.y + mouthY;
+
+    // Mouth Shape (Base + User Offset)
+    // Curve Base: 14, Openness Base: 29
+    const finalMouthCurve = 14 + mouthCurve;
+    const finalMouthOpenness = 29 + mouthOpenness;
 
     return (
-        <div className="relative w-full h-full flex justify-center items-center debug-mode">
-            {/* Glow Filter Definition Container (hidden) - Commented out for debugging
-            <svg width="0" height="0">
-                <defs>
-                    <filter id="glow">
-                        <feGaussianBlur stdDeviation="6" result="coloredBlur" />
-                        <feMerge>
-                            <feMergeNode in="coloredBlur" />
-                            <feMergeNode in="SourceGraphic" />
-                        </feMerge>
-                    </filter>
-                </defs>
-            </svg>
+        <div className="w-full h-full flex justify-center items-center">
+            {/* 
+                Face Container (Self-contained)
+                - Black background and shape defined here
+                - Visual styles: bg-black, rounded corners, shadow
             */}
-
             <motion.div
-                className="w-[400px] h-[400px] bg-gray-800 rounded-[60px] border-4 border-white/20"
+                className="relative w-full h-full bg-black rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden flex items-center justify-center"
                 animate={{
-                    boxShadow: `0 0 ${20 + glowIntensity * 30}px ${color}33` // Hex opacity 33
+                    boxShadow: `0 0 ${20 + glowIntensity * 50}px ${color}15` // Dynamic outer glow
                 }}
                 transition={{ duration: 0.5 }}
+                style={{ aspectRatio: '1/1' }}
             >
+                {/* Inner Ambient Glow */}
+                <div
+                    className="absolute inset-0 opacity-20 pointer-events-none"
+                    style={{ background: `radial-gradient(circle at 50% 50%, ${color}, transparent 70%)` }}
+                />
+
                 <svg
                     width="100%"
                     height="100%"
                     viewBox={`0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`}
-                    className="overflow-visible"
+                    preserveAspectRatio="xMidYMid meet"
+                    className="overflow-visible w-full h-full"
                 >
                     <Eye
                         x={leftEyeX}
                         y={eyeY}
+                        width={100}
+                        height={110}
                         scaleY={finalEyeScale}
                         squeeze={eyeSqueeze}
+                        smile={eyeSmile}
                         color={color}
                         glowIntensity={glowIntensity}
                     />
@@ -109,17 +114,20 @@ const FaceRenderer = ({
                     <Eye
                         x={rightEyeX}
                         y={eyeY}
+                        width={100}
+                        height={110}
                         scaleY={finalEyeScale}
                         squeeze={eyeSqueeze}
+                        smile={eyeSmile}
                         color={color}
                         glowIntensity={glowIntensity}
                     />
 
                     <Mouth
-                        x={mouthX}
-                        y={mouthY}
-                        curve={mouthCurve}
-                        openness={mouthOpenness}
+                        x={mouthXPos}
+                        y={mouthYPos}
+                        curve={finalMouthCurve}
+                        openness={finalMouthOpenness}
                         color={color}
                         glowIntensity={glowIntensity}
                     />
