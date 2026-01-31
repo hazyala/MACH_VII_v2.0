@@ -113,7 +113,9 @@ class SystemPipeline:
                 "mode": system_state.robot.current_mode
             },
             "strategy": strategy_manager.get_context(),
-            "timestamp": time.time()
+            "strategy": strategy_manager.get_context(),
+            "timestamp": time.time(),
+            "last_frame": system_state.last_frame_base64
         }
 
 # 싱글톤 인스턴스

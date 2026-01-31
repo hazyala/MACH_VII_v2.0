@@ -12,7 +12,7 @@ from expression.emotion_controller import emotion_controller
 from brain.emotion_updater import llm_updater
 from sensor.realsense_driver import realsense_driver
 from sensor.perception_manager import perception_manager
-from interface.sim_client import pybullet_client
+from interface.backend.sim_client import pybullet_client
 from memory.falkordb_manager import memory_manager
 from strategy.strategy_manager import strategy_manager
 from shared.ui_dto import UserRequestDTO, UserRequestType, OperationMode, RobotTarget, CameraSource

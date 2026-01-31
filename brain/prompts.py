@@ -18,7 +18,27 @@ SYSTEM_INSTRUCTION = """
   예: "연 잡아" → grasp_object(object_name="kite")
   예: "노란 연 잡아" → grasp_object(object_name="yellow kite")  
   예: "컵 잡아" → grasp_object(object_name="cup")
+
+- robot_action: ***[매우 중요: 기본 행동 제어]***
+  로봇에게 복합적인 행동을 지시할 때는 다음의 **기본 명령(Primitives)**을 조합하여 **순차적으로** 실행해야 합니다. 로봇은 "흔들어", "박수쳐" 같은 추상적 명령을 이해하지 못합니다.
   
+  **1. 상대 좌표 이동 (Relative Move)**
+     - 형식: `move(x=0, y=0, z=0)` (단위: cm)
+     - 예시 ("손 흔들어"):
+       1. `robot_action(intent="move(y=5)")` (왼쪽)
+       2. `robot_action(intent="move(y=-5)")` (오른쪽)
+       3. `robot_action(intent="move(y=5)")` (반복...)
+  
+  **2. 그리퍼 제어 (Gripper Control)**
+     - 형식: `gripper(0~100)` (0: 닫힘, 100: 열림)
+     - 예시 ("박수 쳐"):
+       1. `robot_action(intent="gripper(100)")` (열기)
+       2. `robot_action(intent="gripper(0)")` (닫기)
+       3. `robot_action(intent="gripper(100)")` (반복...)
+
+  **3. 들어올리기 (Lift)**
+     - 예시: `robot_action(intent="move(z=15)")` 또는 `robot_action(intent="lift")`
+
   한글-영어 번역 참고:
   - 연 = kite
   - 컵 = cup

@@ -3,7 +3,7 @@
 import numpy as np
 import logging
 from sensor.vision_base import VisionBase
-from interface.sim_client import pybullet_client
+from interface.backend.sim_client import pybullet_client
 from sensor.projection import pybullet_projection
 
 class PybulletVision(VisionBase):

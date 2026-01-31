@@ -4,7 +4,7 @@ import logging
 import time  # 동기 모드를 위해 필요
 import threading
 from .robot_base import RobotBase
-from interface.sim_client import pybullet_client
+from interface.backend.sim_client import pybullet_client
 
 class PybulletRobot(RobotBase):
     """

@@ -16,8 +16,7 @@ class ServoState(Enum):
     DETECT = auto()
     VISUAL_SERVO = auto()  # 연속 제어 루프
     GRASP = auto()
-    LIFT = auto()
-    VERIFY = auto()
+    # LIFT, VERIFY 제거 (Agent 주도)
     SUCCESS = auto()
     FAIL = auto()
 
@@ -58,7 +57,7 @@ class VisualServoing:
                      if target_label.lower() in obj["name"].lower()]
         return candidates[0] if candidates else None
     
-    def execute_pick_sequence(self,
+    def execute_approach_and_grasp(self,
                              target_label: str,
                              get_ee_position: Callable[[], Dict[str, float]],
                              move_robot: Callable[[float, float, float, int, bool, float], bool],  # wait_arrival, timeout 추가
@@ -66,7 +65,7 @@ class VisualServoing:
                              get_gripper_ratio: Optional[Callable[[], float]] = None,
                              grasp_offset_z: float = -1.5) -> bool:
         """
-        비주얼 서보잉 메인 시퀀스
+        비주얼 서보잉 접근 및 파지 (Lift 제외)
         
         Args:
             target_label: 목표 물체 이름
@@ -77,7 +76,7 @@ class VisualServoing:
             grasp_offset_z: 파지 깊이 오프셋
         
         Returns:
-            성공 여부
+            성공 여부 (파지 완료 시 True)
         """
         with self.lock:
             if self.is_running:
@@ -87,9 +86,9 @@ class VisualServoing:
             self.cancel_token.clear()
             self.current_state = ServoState.IDLE
         
-        logging.info(f"[VisualServoing] '{target_label}' 파지 시퀀스 시작")
+        logging.info(f"[VisualServoing] '{target_label}' 접근 및 파지 시작 (Lift 제외)")
         broadcaster.publish("agent_thought", 
-                          f"[VisualServoing] '{target_label}' 파지 시작")
+                          f"[VisualServoing] '{target_label}' 접근 및 파지 시작")
         
         success = False
         self.GRASP_DEPTH = grasp_offset_z
@@ -145,39 +144,13 @@ class VisualServoing:
                         break
                     
                     logging.info("[GRASP] ✅ 그리퍼 완전히 닫힘 (3.5초 대기 완료)")
-                    self._transition(ServoState.LIFT)
-                
-                elif self.current_state == ServoState.LIFT:
-                    logging.info("[LIFT] 들어올리기")
-                    broadcaster.publish("agent_thought", 
-                                      "[VisualServoing] 물체 들어올리는 중...")
                     
-                    current = get_ee_position()
-                    lift_target = {
-                        'x': current['x'],
-                        'y': current['y'],
-                        'z': current['z'] + 15.0  # 15cm 상승
-                    }
-                    
-                    # **동기 모드**: 완전히 들어올릴 때까지 대기 (10초 타임아웃)
-                    success = move_robot(lift_target['x'], lift_target['y'], 
-                                        lift_target['z'], speed=40, wait_arrival=True, timeout=10.0)
-                    
-                    if not success:
-                        logging.error("[LIFT] 들어올리기 실패 (타임아웃)")
-                        self._transition(ServoState.FAIL)
-                    else:
-                        logging.info("[LIFT] 들어올리기 완료")
-                        self._transition(ServoState.VERIFY)
+                    # [Agent Control] 들어올리지 않고 여기서 성공 종료
+                    logging.info("[GRASP] 파지 완료. 제어권을 반환합니다.")
+                    success = True
+                    break
                 
-                
-                elif self.current_state == ServoState.VERIFY:
-                    # VLM 검증은 Agent가 직접 수행
-                    # 여기서는 즉시 SUCCESS로 전환
-                    logging.info("[VERIFY] Visual Servoing 완료, Agent가 VLM 검증 수행 예정")
-                    broadcaster.publish("agent_thought", 
-                                      "[VisualServoing] 파지 시퀀스 완료! Agent가 검증하겠습니다...")
-                    self._transition(ServoState.SUCCESS)
+                # LIFT, VERIFY 단계 제거됨
                 
                 elif self.current_state == ServoState.SUCCESS:
                     broadcaster.publish("agent_thought", 
@@ -199,7 +172,8 @@ class VisualServoing:
         
         finally:
             self.is_running = False
-            if self.cancel_token.is_set():
+            # [Fix] 성공적인 종료 후에는 취소 토큰이 설정되어도 취소로 간주하지 않음
+            if self.cancel_token.is_set() and not success:
                 logging.warning("[VisualServoing] 작업이 취소되었습니다")
                 broadcaster.publish("agent_thought", 
                                   "[VisualServoing] 작업 취소됨")

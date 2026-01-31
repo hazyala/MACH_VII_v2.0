@@ -36,6 +36,13 @@ class RealSenseVision(VisionBase):
             "captured_pose": pose
         }
 
+    def get_frame(self):
+        """
+        현재 프레임(Color, Depth)을 반환합니다.
+        VisionBase의 추상 메서드 구현입니다.
+        """
+        return realsense_driver.get_frames()
+
     def pixel_to_cm(self, u: int, v: int, depth_val: float) -> list:
         """
         픽셀 좌표와 깊이 값을 기반으로 카메라 기준 3D 좌표(x, y, z)를 계산합니다.
