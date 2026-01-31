@@ -5,6 +5,10 @@ from shared.config import GlobalConfig, CameraConfig
 from sensor.pybullet_vision import PybulletVision
 from sensor.realsense_vision import RealSenseVision
 from sensor.yolo_detector import YoloDetector
+from state.system_state import system_state
+import threading
+import time
+import numpy as np
 
 class VisionBridge:
     """
@@ -25,6 +29,10 @@ class VisionBridge:
 
         # 3. 객체 탐지를 위한 YOLOv11 엔진을 초기화합니다.
         self.yolo = YoloDetector()
+
+        # 4. 백그라운드 업데이트 스레드 관리
+        self.running = False
+        self.update_thread = None
 
     def switch_source(self, source: str):
         """실시간으로 카메라 소스를 전환합니다 (pybullet / realsense)"""
@@ -76,12 +84,42 @@ class VisionBridge:
         for i, det in enumerate(raw_detections):
             u, v = det["pixel_center"]
             
-            # 3. 해당 픽셀의 깊이 정보(실제 미터)를 가져옵니다
-            # PyBullet 서버가 이미 선형화를 완료함
-            depth_m = depth_frame[v, u] if v < depth_frame.shape[0] and u < depth_frame.shape[1] else 0
+            # 3. 해당 픽셀의 깊이 정보(실제 미터)를 가져옵니다.
+            # 물체의 표면이 아닌 중심 깊이를 추정하기 위해 ROI 분석을 수행합니다.
             
+            # ROI를 BBox의 40% 크기(중앙 집중)로 설정하여 배경 혼입을 방지합니다.
+            margin_w = int(det["bbox"][0] * 0.3) # 좌우 30%씩 버림 -> 중앙 40% 사용
+            margin_h = int(det["bbox"][1] * 0.3)
+            
+            u_min = max(0, u - det["bbox"][0] // 2 + margin_w)
+            u_max = min(depth_frame.shape[1], u + det["bbox"][0] // 2 - margin_w)
+            v_min = max(0, v - det["bbox"][1] // 2 + margin_h)
+            v_max = min(depth_frame.shape[0], v + det["bbox"][1] // 2 - margin_h)
+            
+            depth_roi = depth_frame[v_min:v_max, u_min:u_max]
+            
+            # 유효한 Depth 값만 필터링 (0보단 크고 3m 이내)
+            valid_depths = depth_roi[(depth_roi > 0) & (depth_roi < 3.0)]
+            
+            if len(valid_depths) > 0:
+                # [적응형 중심 추정 알고리즘]
+                # 1. Median: 물체 표면의 대표값 (이상치 제거)
+                # 2. Std(표준편차): 물체의 입체감(곡률) 척도
+                # 구형 물체는 ROI 내 깊이 변화(편차)가 크므로 더 많이 보정하고,
+                # 평평한상자는 편차가 작으므로 적게 보정합니다.
+                # Center Depth ≈ Median + Std
+                median_d = float(np.median(valid_depths))
+                std_d = float(np.std(valid_depths))
+                
+                depth_m = median_d + std_d
+                
+                log_msg = f"Depth(Median={median_d:.4f} + Std={std_d:.4f})={depth_m:.4f}m"
+            else:
+                depth_m = depth_frame[v, u] if v < depth_frame.shape[0] and u < depth_frame.shape[1] else 0
+                log_msg = f"Depth(Point)={depth_m:.4f}m"
+
             logging.info(f"[VisionBridge] 물체 #{i} '{det['name']}': "
-                        f"픽셀=({u}, {v}), depth={depth_m:.4f}m")
+                        f"픽셀=({u}, {v}), ROI샘플수={len(valid_depths)}, {log_msg}")
             
             if depth_m <= 0:
                 logging.warning(f"[VisionBridge] 물체 #{i} '{det['name']}': 유효하지 않은 깊이 값 ({depth_m})")
@@ -126,3 +164,46 @@ class VisionBridge:
                 
         logging.info(f"[VisionBridge] 최종 탐지 결과: {len(refined_list)}개 물체 좌표 반환")
         return refined_list
+
+    def start_continuous_update(self, interval: float = 0.03):
+        """
+        비전 데이터를 백그라운드에서 주기적으로 갱신하는 스레드를 시작합니다.
+        
+        Args:
+            interval: 갱신 주기 (초), 기본값 0.03초 (약 30Hz)
+        """
+        if self.running:
+            return
+            
+        self.running = True
+        self.update_thread = threading.Thread(target=self._update_loop, args=(interval,), daemon=True)
+        self.update_thread.start()
+        logging.info("[VisionBridge] 연속 비전 업데이트 스레드 시작 (30Hz)")
+
+    def stop_continuous_update(self):
+        """비전 업데이트 스레드를 중지합니다."""
+        self.running = False
+        if self.update_thread:
+            self.update_thread.join(timeout=1.0)
+        logging.info("[VisionBridge] 연속 비전 업데이트 스레드 중지")
+
+    def _update_loop(self, interval: float):
+        """백그라운드에서 실행되는 메인 루프"""
+        while self.running:
+            try:
+                # 1. 최신 탐지 결과 획득
+                detections = self.get_refined_detections()
+                
+                # 2. SystemState 업데이트 (Thread-safe)
+                # perception_data 전체를 교체
+                system_state.perception_data = {
+                    "timestamp": time.time(),
+                    "detected_objects": detections,
+                    "count": len(detections)
+                }
+                
+                time.sleep(interval)
+            except Exception as e:
+                logging.error(f"[VisionBridge] 업데이트 루프 오류: {e}")
+                time.sleep(1.0) # 오류 발생 시 잠시 대기
+

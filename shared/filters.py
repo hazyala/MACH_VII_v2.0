@@ -21,6 +21,9 @@ class KalmanFilter:
         
         self.process_var = process_variance
         self.measure_var = measurement_variance
+        
+        # 첫 측정값으로 초기화했는지 여부
+        self.is_initialized = False
 
     def update(self, measurement):
         """
@@ -31,7 +34,13 @@ class KalmanFilter:
         Returns:
             filter_result: 노이즈가 제거된 부드러운 좌표 값
         """
-        # 1. 예측 단계 (Time Update)
+        # 1. 첫 측정 시 초기화
+        if not self.is_initialized:
+            self.state_estimate = measurement
+            self.is_initialized = True
+            return self.state_estimate
+
+        # 2. 예측 단계 (Time Update)
         # 이전 상태가 그대로 유지된다고 가정함
         prior_estimate = self.state_estimate
         prior_error_cov = self.post_error_cov + self.process_var

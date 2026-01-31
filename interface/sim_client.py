@@ -30,21 +30,9 @@ class PyBulletClient:
         
         self.initialized = True
         
-        # [명령 지속 전송] PyBullet 서버가 명령을 즉시 삭제하므로 클라이언트에서 지속적으로 보내야 함
-        self.current_target_pos = None
-        self.running = True
-        self.pos_sender_thread = threading.Thread(target=self._pos_sender_loop, daemon=True)
-        self.pos_sender_thread.start()
+        # 재전송 로직 제거: Visual Servoing이 20Hz로 직접 제어하므로 불필요
 
-    def _pos_sender_loop(self):
-        """백그라운드에서 주기적으로 목표 위치 명령을 재전송합니다."""
-        while self.running:
-            if self.connected and self.current_target_pos is not None:
-                try:
-                    self.sio.emit('set_pos', {'pos': self.current_target_pos})
-                except Exception:
-                    pass
-            time.sleep(0.02)  # 50Hz 전송
+
 
     def connect(self, timeout=2):
         if self.connected: return
@@ -54,9 +42,13 @@ class PyBulletClient:
             self.sio.connect(self.server_url, wait_timeout=timeout)
             self.connected = True
         except Exception as e:
-            logging.error(f"[PyBullet] Connection failed: {e}")
-            logging.warning("[PyBullet] 시뮬레이션 서버가 실행 중인지 확인하세요. (기본값: http://localhost:5000)")
-            self.connected = False
+            if "Client is not in a disconnected state" in str(e):
+                logging.info("[PyBullet] 이미 연결된 상태입니다. (Flag 보정)")
+                self.connected = True
+            else:
+                logging.error(f"[PyBullet] Connection failed: {e}")
+                logging.warning("[PyBullet] 시뮬레이션 서버가 실행 중인지 확인하세요. (기본값: http://localhost:5000)")
+                self.connected = False
 
     def on_connect(self):
         logging.info("[PyBullet] Connected to Simulation Server")
@@ -86,11 +78,9 @@ class PyBulletClient:
         self.sio.emit('set_force', {'force': force})
 
     def set_pos(self, pos: list):
-        """ pos: [x, y, z] """
+        """ pos: [x, y, z] - 단일 전송만 수행 """
         if not self.connected: return
-        # 즉시 전송 및 지속 전송 활성화
         self.sio.emit('set_pos', {'pos': pos})
-        self.current_target_pos = pos
 
     def set_gripper(self, value: float):
         """ value: 0.0 ~ 0.06 """

@@ -88,6 +88,24 @@ async def handle_request(dto: UserRequestDTO, background_tasks: BackgroundTasks)
     # 1. 텍스트 명령 처리
     if dto.request_type == UserRequestType.COMMAND:
         if dto.command:
+            # [Fast Path] 긴급 정지 키워드 감지 시 에이전트 우회하여 즉시 정지
+            cmd_lower = dto.command.lower()
+            stop_keywords = ["멈춰", "정지", "stop", "관둬", "취소", "중단"]
+            if any(k in cmd_lower for k in stop_keywords):
+                from embodiment.robot_controller import robot_controller
+                from strategy.visual_servoing import visual_servoing
+                from shared.state_broadcaster import broadcaster
+                
+                broadcaster.publish("agent_thought", "🚨 긴급 정지 키워드 감지! 즉시 중단합니다.")
+                
+                # [Brain 중지]
+                logic_brain.stop_agent()
+                
+                # [Action 중지]
+                visual_servoing.stop()
+                robot_controller.robot_driver.emergency_stop()
+                return {"status": "stopped", "message": "Immediate stop executed"}
+
             background_tasks.add_task(logic_brain.execute_task, dto.command)
             return {"status": "accepted", "type": "command", "payload": dto.command}
     
@@ -109,7 +127,17 @@ async def handle_request(dto: UserRequestDTO, background_tasks: BackgroundTasks)
     # 3. 긴급 정지 처리
     elif dto.request_type == UserRequestType.EMERGENCY:
         from embodiment.robot_controller import robot_controller
+        from strategy.visual_servoing import visual_servoing
+        
+        # [Brain 중지]
+        logic_brain.stop_agent()
+        
+        # 1. 서보잉 루프 중단 (논리적 정지)
+        visual_servoing.stop()
+        
+        # 2. 하드웨어 정지 (물리적 정지)
         robot_controller.robot_driver.emergency_stop()
+        
         broadcaster.publish("agent_thought", "[System] UI를 통한 긴급 정지가 발동되었습니다.")
         return {"status": "emergency_stop_triggered"}
 

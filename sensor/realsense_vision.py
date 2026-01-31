@@ -3,7 +3,6 @@
 import numpy as np
 from .vision_base import VisionBase
 from .realsense_driver import realsense_driver
-from embodiment.robot_controller import robot_controller
 
 class RealSenseVision(VisionBase):
     """
@@ -24,9 +23,12 @@ class RealSenseVision(VisionBase):
             
         # [Sync] 영상 획득 시점의 로봇 포즈 획득
         # 실물 로봇의 경우 드라이버로부터 현재 관절/좌표를 읽어와야 함
+        # NOTE: 직접 robot_controller를 import하지 않고 state를 통해 간접 참조
+        from state.system_state import system_state
         pose = {}
-        if hasattr(robot_controller.robot_driver, 'get_current_pose'):
-             pose = robot_controller.robot_driver.get_current_pose()
+        
+        # 로봇 상태에서 포즈 정보가 있다면 사용 (추후 확장 가능)
+        # 현재는 빈 딕셔너리로 유지 (실제 하드웨어 연동 시 드라이버에서 직접 읽어야 함)
 
         return {
             "color": color,

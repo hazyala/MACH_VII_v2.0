@@ -107,6 +107,7 @@ def handle_set_joints(data):
 @socketio.on('set_gripper')
 def handle_set_gripper(data):
     if 'gripper' in data:
+        print(f">>> Received: set_gripper -> {data['gripper']}")  # 디버그 로그
         with shared.cmd_lock:
             shared.command["gripper_cmd"] = data['gripper']
 
@@ -115,6 +116,7 @@ def handle_set_gripper(data):
 @socketio.on('set_pos')
 def handle_set_pos(data):
     if 'pos' in data:
+        print(f">>> Received: set_pos -> {data['pos']}")  # 디버그 로그 추가
         with shared.cmd_lock:
             shared.command["target_pos"] = data['pos']
 
