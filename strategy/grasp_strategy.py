@@ -1,6 +1,6 @@
 # strategy/grasp_strategy.py
 
-from sensor.vision_bridge import VisionBridge
+from sensor.perception import VisionBridge
 from strategy.grasp_planner import grasp_planner
 from state.system_state import system_state
 from shared.state_broadcaster import broadcaster

@@ -4,7 +4,7 @@ import base64
 import requests
 import cv2
 from langchain_core.tools import tool
-from sensor.vision_bridge import VisionBridge
+from sensor.perception import VisionBridge
 from shared.config import GlobalConfig
 
 @tool

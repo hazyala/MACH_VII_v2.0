@@ -1,54 +1,97 @@
-# 👁️ Sensor (감각 - 시각 처리 시스템)
+# 📡 Sensor Layer (Layer 1)
 
-## ⚠️ 구현 상태 (Implementation Status)
-- **현재 상태**: ✅ **구현 완료 (Implemented)**
-    - RealSense 및 PyBullet 카메라 드라이버가 모두 구현되어 있습니다.
-    - 2D 이미지를 3D 좌표로 변환하는 **역투영(Inverse Projection)** 로직이 포함되어 있습니다.
+센서 레이어는 외부 세계(실물 하드웨어 또는 시뮬레이션 환경)로부터 정보를 수집하여 로봇이 인지할 수 있는 가공된 데이터로 변환하는 MACH_VII v2.0의 최하단 기초 계층입니다.
 
 ---
 
-## 📖 개요 (Overview)
-이 폴더는 로봇의 **'눈(Vision)'** 역할을 수행합니다.
-단순히 사진을 찍는 것을 넘어, 사진 속의 물체가 **실제 세상(3D World)에서 어디에 위치하는지 계산**하는 수학적 로직이 핵심입니다.
+## 🏗 아키텍처 구조 (3-Tier)
+
+본 레이어는 유연성과 유지보수성을 극대화하기 위해 다음과 같은 3계층 구조로 설계되었습니다.
+
+```mermaid
+flowchart TD
+    subgraph Perception ["Perception Tier"]
+        PM["Perception Manager"] --> VB["Vision Bridge"]
+        VB --> YD["YOLO Detector"]
+    end
+    
+    subgraph Implementations ["Implementations Tier"]
+        RV["RealSense Vision"]
+        PV["Pybullet Vision"]
+    end
+    
+    subgraph Core ["Core Tier"]
+        RD["RealSense Driver"]
+        VBase["Vision Base"]
+        KF["Kalman Filter"]
+    end
+
+    VB --> RV
+    VB --> PV
+    RV --> RD
+    RV --> VBase
+    PV --> VBase
+    VBase --> KF
+```
+
+### 1. Core Tier (`sensor/core/`)
+시스템의 기반이 되는 표준과 하드웨어 드라이버를 포함합니다.
+*   **[`vision_base.py`](file:///d:/ARMY/MACH_VII_v2.0/sensor/core/vision_base.py)**: 모든 비전 시스템의 모태 클래스입니다. **X-Y-Z 좌표별 칼만 필터(Kalman Filter)**를 내장하여 데이터 떨림을 근본적으로 제거합니다.
+*   **[`realsense_driver.py`](file:///d:/ARMY/MACH_VII_v2.0/sensor/core/realsense_driver.py)**: RealSense SDK(pyrealsense2)와 직접 통신하며, 실제 하드웨어의 렌즈 파라미터(Intrinsics)를 추출하여 정밀 제어를 지원합니다.
+
+### 2. Implementations Tier (`sensor/implementations/`)
+특정 환경에 특화된 비전 데이터 획득 로직을 구현합니다.
+*   **[`realsense_vision.py`](file:///d:/ARMY/MACH_VII_v2.0/sensor/implementations/realsense_vision.py)**: 실물 로봇 환경을 위한 구현체로, SDK 파라미터를 기반으로 픽셀을 3D 좌표로 변환합니다.
+*   **[`pybullet_vision.py`](file:///d:/ARMY/MACH_VII_v2.0/sensor/implementations/pybullet_vision.py)**: 시뮬레이션 환경을 위한 구현체로, **Oracle Depth**와 **Phantom Detection 차단** 로직을 통해 시뮬레이션 오차를 완벽히 극복합니다.
+
+### 3. Perception Tier (`sensor/perception/`)
+수집된 저수준 데이터를 고수준 인지 정보로 가공하고 전파합니다.
+*   **[`yolo_detector.py`](file:///d:/ARMY/MACH_VII_v2.0/sensor/perception/yolo_detector.py)**: YOLOv11 모델을 사용하여 실시간 객체 탐지를 수행합니다.
+*   **[`vision_bridge.py`](file:///d:/ARMY/MACH_VII_v2.0/sensor/perception/vision_bridge.py)**: 2D 픽셀을 3D cm 좌표로 변환하는 '핵심 중계자'입니다. **Adaptive Depth Estimation(Median + Std)** 기법을 사용하여 물체의 입체 중심을 조준합니다.
+*   **[`perception_manager.py`](file:///d:/ARMY/MACH_VII_v2.0/sensor/perception/perception_manager.py)**: 비전 루프를 총괄하며, 가공된 데이터를 `system_state`에 기록하고 시스템 전반에 이벤트를 발행(Broadcasting)합니다.
 
 ---
 
-## 📂 파일 구조 및 상세 설명 (Structure & Files)
+## 🛠 주요 기술 스택 및 특징
 
-### 1. `projection/` (폴더: 좌표 변환기)
-- **`pybullet_projection.py`**: 가상 환경용 역투영 로직.
-- **`realsense_projection.py`**: 실제 카메라용 역투영 로직.
-- **[핵심 기능] 역투영 (Inverse Projection)이란?**:
-    - 카메라는 3차원 세상을 2차원 평면(화면)으로 납작하게 만듭니다. 이를 다시 3차원으로 되돌리는 기술입니다.
-    - **로직**:
-        1. **Intrinsic(내부 파라미터)**: 카메라 렌즈의 특성(초점 거리 fx, fy / 중심점 cx, cy)을 가져옵니다.
-        2. **Extrinsic(외부 파라미터)**: 카메라가 세상의 어디에 설치되어 있는지(위치, 회전) 행렬을 가져옵니다.
-        3. **연산**: 화면상의 점 `(u, v)`와 깊이 `(depth)`를 알면, 핀홀 카메라 공식 `x = (u - cx) * depth / fx`를 역으로 계산하여 카메라 기준 3D 좌표를 얻습니다.
-        4. **변환**: 카메라 기준 좌표에 `Extrinsic` 행렬을 곱해 **월드 절대 좌표(World Coordinate)**를 구합니다.
+1.  **정밀 좌표 변환 (Precision Transformation)**
+    *   **Kalman Filtering**: 베이스 클래스에 내재화된 필터링을 통해 하드웨어 노이즈 및 좌표 튀는 현상 방지.
+    *   **Adaptive Depth**: 물체의 표면 거리가 아닌, 통계적 분석을 통한 '실제 중심' 깊이 산출.
 
-### 2. `realsense_driver.py` (실제 눈)
-- **역할**: Intel RealSense 카메라 하드웨어를 제어합니다.
-- **기능**: 컬러(RGB)와 깊이(Depth) 스트림을 켜고 데이터를 읽어옵니다.
+2.  **하드웨어 정밀 연동 (Hardware Sync)**
+    *   **SDK-Direct Intrinsics**: 카메라 소스별 고유 렌즈 특성을 실시간으로 반영하여 오차 최소화.
+    *   **IMU Expansion Ready**: 향후 하드웨어 기울기 보정을 위한 확장성 주석 완비.
 
-### 3. `pybullet_vision.py` (가상 눈)
-- **역할**: PyBullet 시뮬레이터에서 가상의 이미지를 캡처해옵니다.
-
-### 4. `vision_bridge.py` (연결 다리)
-- **역할**: 위 두 드라이버 중 하나를 선택하여, 시스템이 통일된 방식으로 이미지를 받을 수 있게 해주는 중개자입니다.
+3.  **구조적 최적화 (Structural Optimization)**
+    *   **Unified Loop Control**: 중복된 업데이트 루프를 제거하고 `PerceptionManager` 하나로 통합하여 CPU 자원 자용 최적화.
+    *   **Encapsulation**: `__init__.py` 기반의 캡슐화로 타 레이어에서는 명확한 인터페이스만 노출.
 
 ---
 
-## ⚙️ 작동 원리 (Process Flow)
+## 📖 사용 방법
 
-1. **이미지 캡처**: `vision_bridge`가 드라이버를 호출해 사진과 깊이 지도를 얻습니다.
-2. **물체 인식**: (이 폴더 밖의) YOLO나 VLM이 사진에서 "오리"를 찾고, 그 오리의 화면 좌표 `(x: 300, y: 200)`를 줍니다.
-3. **좌표 변환 요청**: 시스템이 `projection` 모듈에게 "화면 (300, 200)이 실제로는 어디야?"라고 묻습니다.
-4. **거리 확인**: 해당 픽셀의 깊이(Depth) 값을 확인합니다 (예: 0.5m).
-5. **역투영 계산**: `pybullet_projection.pixel_to_3d(300, 200, 0.5)`를 실행합니다.
-6. **결과 반환**: "그 오리는 로봇 기준 `(X: 15cm, Y: 0cm, Z: 10cm)`에 있다"고 알려줍니다.
+다른 레이어에서 비전 정보를 사용할 때는 해당 모듈만 간단히 임포트하여 사용합니다.
+
+```python
+# 인식된 사물 리스트 가져오기 (가공된 3D 좌표 포함)
+from sensor.perception import vision_bridge
+objects = vision_bridge.get_refined_detections()
+
+# 비전 루프 제어 (관리자 소환)
+from sensor.perception import perception_manager
+perception_manager.start()
+```
 
 ---
 
-## 🔗 상속 및 관계 (Relationships)
-- **사용자**: `State` (결과를 저장), `Strategy/VisualServoing` (이 좌표를 보고 팔을 움직임)
-- **의존성**: `numpy` (행렬 연산), `pybullet` (시뮬레이션 행렬 계산)
+## ⚙️ 작동 흐름 (Data Flow)
+1. **Perception** 레이어의 `perception_manager`가 루프를 시작합니다.
+2. `VisionBridge`는 현재 설정된 **Implementations** (Sim/Real)를 통해 영상을 가져옵니다.
+3. `YoloDetector`가 사물을 인식하면, **VisionBridge** 내의 **Adaptive Depth Estimation** 및 **Kalman Filter**를 거쳐 정밀한 3D 좌표로 변환됩니다.
+4. 최종 결과는 `shared/broadcaster`를 통해 공유되고 `state/system_state`에 기록됩니다.
+
+---
+
+## 🔗 상속 및 관계
+- **사용처**: `brain/tools` (탐지 요청), `strategy` (작업 계획), `interface` (UI 스트리밍)
+- **의존성**: `shared/config`, `shared/state_broadcaster`, `state/system_state`

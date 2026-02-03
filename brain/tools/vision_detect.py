@@ -1,5 +1,5 @@
 from langchain_core.tools import tool
-from sensor.vision_bridge import VisionBridge
+from sensor.perception import VisionBridge
 
 @tool
 def vision_detect(query: str = "detect") -> str:

@@ -24,7 +24,7 @@ def pixel_to_3d(pixel_x: int, pixel_y: int, depth_m: float, intrinsics) -> Tuple
     try:
         import pyrealsense2 as rs
         
-        # RealSense SDK의 정확한 역투영 사용
+        # RealSense SDK의 정확한 역투영(Deprojection: 2D 픽셀을 3D 점으로 되돌리는 계산) 사용
         point_m = rs.rs2_deproject_pixel_to_point(intrinsics, [pixel_x, pixel_y], depth_m)
         
         # m → cm 변환

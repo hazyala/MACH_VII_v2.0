@@ -1,7 +1,15 @@
 import logging
 import numpy as np
 import math
-import pybullet as p
+
+# PyBullet 라이브러리 가용성 체크
+PYBULLET_AVAILABLE = False
+try:
+    import pybullet as p
+    PYBULLET_AVAILABLE = True
+except ImportError:
+    PYBULLET_AVAILABLE = False
+    logging.warning("[PyBulletProjection] pybullet 모듈을 찾을 수 없습니다. 시뮬레이션 투영 기능을 사용할 수 없습니다.")
 
 # PyBullet 카메라 설정 (pybullet_sim.py와 일치해야 함)
 CAMERA_CONFIG = {
@@ -17,29 +25,29 @@ CAMERA_CONFIG = {
 
 def _get_camera_parameters():
     """
-    PyBullet API를 통해 View/Projection Matrix를 계산하고
-    Intrinsic(FX, FY, CX, CY) 및 Extrinsic(Cam->World) 행렬을 추출합니다.
+    PyBullet API를 통해 View/Projection Matrix(뷰/프로젝션 행렬: 3D 공간을 2D 화면으로 투영하기 위한 수학적 변환표)를 계산하고
+    Intrinsic(내인자: 렌즈 속성) 및 Extrinsic(외인자: 카메라 위치/각도) 행렬을 추출합니다.
     """
     width = CAMERA_CONFIG["width"]
     height = CAMERA_CONFIG["height"]
     
-    # 1. View Matrix 계산 (OpenGL 포맷: 4x4 리스트, Column-major)
-    # World -> Camera 좌표계 변환 행렬
+    # 1. View Matrix(뷰 행렬: 월드 좌표를 카메라 중심 좌표로 변환) 계산 
+    # (OpenGL 포맷: 4x4 리스트, Column-major: 열 우선 정렬 방식)
     view_matrix_list = p.computeViewMatrix(
         cameraEyePosition=CAMERA_CONFIG["camera_eye"],
         cameraTargetPosition=CAMERA_CONFIG["camera_target"],
         cameraUpVector=CAMERA_CONFIG["camera_up"]
     )
-    # Row-major numpy 배열로 변환
+    # Row-major(행 우선 정렬 방식) numpy 배열로 변환
     view_matrix = np.array(view_matrix_list).reshape(4, 4, order='F')
     
-    # Camera -> World (Inverse View Matrix)
+    # Camera -> World (Inverse View Matrix: 카메라 좌표를 다시 월드 좌표로 되돌리는 역행렬)
     # CamToWorld = [Right  Up  -Forward  Eye]
     #              [  0    0       0      1 ]
     cam_to_world = np.linalg.inv(view_matrix)
     
-    # 2. Projection Matrix 계산
-    # Camera -> NDC(Clip) 변환 행렬
+    # 2. Projection Matrix(투영 행렬: 카메라 좌표를 화면의 2D 좌표로 변환) 계산
+    # Camera -> NDC(기기 독립적인 표준 좌표계) 변환 행렬
     aspect = width / height
     proj_matrix_list = p.computeProjectionMatrixFOV(
         fov=CAMERA_CONFIG["fov"],
@@ -49,11 +57,9 @@ def _get_camera_parameters():
     )
     proj_matrix = np.array(proj_matrix_list).reshape(4, 4, order='F')
     
-    # 3. Intrinsic 파라미터 추출
+    # 3. Intrinsic(내인자: 렌즈 고유 파라미터) 추출
     # P[0,0] = 2*fx/W  => fx = P[0,0] * W / 2
     # P[1,1] = 2*fy/H  => fy = P[1,1] * H / 2
-    # P[0,2] = -(2*cx/W - 1) (보통 0)
-    # P[1,2] = -(2*cy/H - 1) (보통 0)
     
     # 주의: PyBullet(OpenGL) Projection Matrix는 Screen Space가 아닌 NDC(-1~1)로 보냅니다.
     # fx, fy는 NDC 기준 스케일입니다. 픽셀 단위 fx, fy로 변환합니다.
@@ -79,15 +85,10 @@ def pixel_to_3d(pixel_x: int, pixel_y: int, depth_m: float) -> tuple:
     """
     PyBullet 픽셀 좌표를 월드 3D 좌표(cm)로 변환합니다.
     API와 동일한 매트릭스를 사용하여 오차를 제거했습니다.
-    
-    Args:
-        pixel_x: 픽셀 u 좌표 (0 ~ width-1)
-        pixel_y: 픽셀 v 좌표 (0 ~ height-1)
-        depth_m: Planar Depth (view space z value)
-    
-    Returns:
-        (x, y, z): 월드 좌표 cm 단위
     """
+    if not PYBULLET_AVAILABLE:
+        logging.error("[PyBulletProjection] pybullet 모듈이 없어 좌표 변환을 수행할 수 없습니다.")
+        return 0.0, 0.0, 0.0
     
     # 1. 픽셀 → 카메라 좌표계 (View Space)
     # OpenGL 카메라 좌표계: X(Right), Y(Up), Z(Backward, 즉 -Forward)
@@ -127,13 +128,13 @@ def pixel_to_3d(pixel_x: int, pixel_y: int, depth_m: float) -> tuple:
 
 def calculate_planar_depth(world_x_cm, world_y_cm, world_z_cm):
     """
-    월드 좌표(cm)에 해당하는 점의 카메라 기준 Planar Depth(m)를 계산합니다.
-    (Oracle Depth: 완벽한 깊이 센서를 가정할 때 사용)
+    월드 좌표(cm)에 해당하는 점의 카메라 기준 Planar Depth(평면 깊이: 카메라 정면에서 수직으로 잰 거리)를 계산합니다.
+    (Oracle Depth: 물리 엔진이 알려주는 오차 없는 완벽한 정답 거리를 가정할 때 사용)
     """
     # 1. cm -> m 변환
     world_pos_m = np.array([world_x_cm/100.0, world_y_cm/100.0, world_z_cm/100.0, 1.0])
     
-    # 2. World -> Camera (View Matrix) 변환
+    # 2. World -> Camera (View Matrix: 뷰 행렬) 변환
     # CAM_TO_WORLD_MAT의 역행렬이 View Matrix입니다.
     view_matrix = np.linalg.inv(CAM_TO_WORLD_MAT)
     

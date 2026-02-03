@@ -83,7 +83,15 @@ UI 상태 직접 변경
 *   **역할**: 최종 물리량을 실제로 화면에 그리거나 모터를 움직입니다.
 *   **규칙**: 자체적인 판단 로직을 절대 포함하지 않습니다. (UI is Dumb)
 
-### 7. `shared/`
-*   **역할**: 모든 레이어에서 공통으로 사용하는 설정값과 데이터 타입을 관리합니다.
-*   **핵심**: `PathConfig`를 통해 프로젝트 내 모든 파일 경로를 중앙 집중식(`pathlib` 기반)으로 관리합니다.
-*   **규칙**: 여기 있는 모듈은 어디서든 Import 가능하지만, 비즈니스 로직을 포함해선 안 됩니다.
+### 8. `docs/` (프로젝트 기록 및 현황)
+*   **역할**: 프로젝트의 아키텍처와 개발 진척도를 기록하는 중앙 저장소입니다.
+*   **핵심 파일**:
+    *   `DEVELOPMENT_OVERVIEW.md`: 레이어별 리팩토링 및 개발 현황 대시보드
+    *   `ARCHITECTURE_STATUS.md`: 7계층 아키텍처 설계 및 실제 적용 현황
+    *   `PROJECT_STRUCTURE.md`: 현재 문서 (폴더 및 파일 명세)
+
+### 9. `sensor/` 상세 구조 (Layer 1 & 2)
+*   **`core/`**: 비전 베이스 클래스(`vision_base.py`) 및 하드웨어 드라이버(`realsense_driver.py`).
+*   **`implementations/`**: 환경별 구현체(`realsense_vision.py`, `pybullet_vision.py`).
+*   **`perception/`**: YOLO 탐지(`yolo_detector.py`), 좌표 중계(`vision_bridge.py`) 및 관리자(`perception_manager.py`).
+*   **`projection/`**: 정밀 좌표 투영 알고리즘 수식 모듈.
