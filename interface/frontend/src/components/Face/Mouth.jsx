@@ -1,48 +1,46 @@
 import { motion } from 'framer-motion';
 
 const Mouth = ({
-    x = 200, // Center X
-    y = 280, // Base Y
+    x = 200, // 가로 중앙 좌표
+    y = 280, // 세로 기준 좌표
     width = 80,
-    curve = 0, // -100 (Sad/Frown) to 100 (Happy/Smile)
-    openness = 0, // 0 (Closed) to 100 (Open/Surprised)
+    curve = 0, // -100 (슬픔/찡그림)에서 100 (행복/웃음) 사이의 곡률
+    openness = 0, // 0 (다묾)에서 100 (벌림/놀람) 사이의 개방 정도
+    roundness = 0, // 0 (넓은 타원)에서 1 (동그란 O형) 사이의 정도
     color = "#FFFFFF",
     glowIntensity = 0.5
 }) => {
 
-    // Bezier Control Points
-    // Start and End points
-    const startX = x - width / 2;
-    const endX = x + width / 2;
+    // 베지어 곡선 제어점 (Bezier Control Points)
+    // roundness가 높을수록 너비를 좁힙니다.
+    const effectiveWidth = width * (1 - roundness * 0.5);
 
-    // Control Point (determines curve)
-    // Curve affects the Y position of the control point
+    // 시작 및 끝점 계산
+    const startX = x - effectiveWidth / 2;
+    const endX = x + effectiveWidth / 2;
+
+    // 제어점 (곡률 결정)
+    // curve와 openness가 기본 베이스가 되며, roundness는 추가적인 수직 보정을 제공할 수 있습니다.
     const controlY = y + (curve * 1.5) + openness;
 
-    // When open, the bottom lip also moves down
+    // 입을 벌렸을 때 아랫입술도 아래로 이동합니다.
     const bottomY = y + (openness * 1.5);
 
-    // Simple Line or Curve (Mouth closed)
+    // 단순한 선 또는 곡선 (입을 다물었을 때)
     const dClosed = `M ${startX} ${y} Q ${x} ${controlY} ${endX} ${y}`;
 
-    // Open Mouth (Oval-ish shape)
-    // To simulate opening, we can add a second curve back?
-    // Or just thicken the stroke?
-    // Let's implement an open mouth as a path that returns to start
-    // For simplicity, if openness > 10, we draw an open shape
+    // 벌린 입 (타원형 형태)
+    // 입을 벌리는 효과를 구현하기 위해 두 개의 곡선을 연결한 경로를 사용합니다.
 
     let d = dClosed;
     if (openness > 10) {
-        // Upper lip (curve) + Lower lip (inverse curve or drop)
-        // d = `M ${startX} ${y} Q ${x} ${controlY} ${endX} ${y} Q ${x} ${bottomY} ${startX} ${y}`;
-        // Actually, standard mouth opening:
-        // Upper lip stays roughly put or curves up (smile)
-        // Lower lip drops
+        // 입술의 윗부분(곡률 적용) + 아랫부분(반대 곡률 또는 아래로 처짐)
+        // roundness가 높을수록 위아래 곡률을 더 강하게 주어 원형에 가깝게 만듭니다.
 
-        const upperControlY = y + (curve * 0.5); // Slight curve on top
-        const lowerControlY = y + openness + (curve * 0.5); // Open + Curve
+        const upperControlShift = (openness * 0.5) * roundness;
+        const upperControlY = y + (curve * 0.5) - upperControlShift;
 
-        // If curve is negative (frown), lips curve down.
+        const lowerControlY = y + openness + (curve * 0.5) + upperControlShift;
 
         d = `M ${startX} ${y} 
            Q ${x} ${upperControlY} ${endX} ${y}

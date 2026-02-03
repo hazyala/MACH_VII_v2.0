@@ -136,7 +136,7 @@ MACH_VII_v2.0/
 ### 1. 필수 환경
 *   **Anaconda / Miniconda**
 *   **Node.js v18+**
-*   **Python 3.10+**
+*   **Python 3.14+**
 
 ### 2. Backend (Conda + Docker)
 ```bash

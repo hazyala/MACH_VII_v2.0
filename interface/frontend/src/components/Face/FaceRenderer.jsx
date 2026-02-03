@@ -4,14 +4,13 @@ import Mouth from './Mouth';
 import { motion } from 'framer-motion';
 
 const FaceRenderer = ({
-    eyeOpenness = 1.0,
+    leftEye = { openness: 1.0, squeeze: 0.0, smile: 0.0, rotation: 0.0 },
+    rightEye = { openness: 1.0, squeeze: 0.0, smile: 0.0, rotation: 0.0 },
     mouthCurve = 0,
     mouthOpenness = 0,
     mouthX = 0,
     mouthY = 0,
-    eyeSqueeze = 0,
-    eyeSmile = 0,
-    eyeRotation = 0,
+    mouthRoundness = 0,
     gazeX = 0,
     gazeY = 0,
     color = "#FFFFFF",
@@ -55,8 +54,9 @@ const FaceRenderer = ({
         return () => clearInterval(interval);
     }, [isAlive]);
 
-    // 계산 (Calculations)
-    const finalEyeScale = eyeOpenness * blinkState;
+    // 계산 (간단한 눈 크기 보정)
+    const finalLeftEyeScale = leftEye.openness * blinkState;
+    const finalRightEyeScale = rightEye.openness * blinkState;
 
     // 좌표 계산 (기본값 + 사용자 오프셋)
     // 눈 Y 좌표: 160 + 15 (기준점 + 보정) = 175
@@ -82,12 +82,12 @@ const FaceRenderer = ({
             <motion.div
                 className="relative w-full h-full bg-black rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden flex items-center justify-center"
                 animate={{
-                    boxShadow: `0 0 20px rgba(0,0,0,0.5)` // Subtle non-neon shadow
+                    boxShadow: `0 0 20px rgba(0,0,0,0.5)` // 네온 효과가 아닌 은은한 그림자 효과 유지
                 }}
                 transition={{ duration: 0.5 }}
                 style={{ aspectRatio: '1/1' }}
             >
-                {/* Inner Ambient Glow - Reverted to very subtle or removed if requested, keeping subtle for now */}
+                {/* 내부 앰비언트 글로우 (Ambient Glow) - 요청에 따라 매우 은은하게 유지하거나 제거 가능 */}
                 <div
                     className="absolute inset-0 opacity-10 pointer-events-none"
                     style={{ background: `radial-gradient(circle at 50% 50%, ${color}, transparent 70%)` }}
@@ -105,10 +105,10 @@ const FaceRenderer = ({
                         y={eyeY}
                         width={100}
                         height={110}
-                        scaleY={finalEyeScale}
-                        squeeze={eyeSqueeze}
-                        smile={eyeSmile}
-                        rotation={eyeRotation}
+                        scaleY={finalLeftEyeScale}
+                        squeeze={leftEye.squeeze}
+                        smile={leftEye.smile}
+                        rotation={leftEye.rotation}
                         isLeft={true}
                         color={color}
                         glowIntensity={glowIntensity}
@@ -119,10 +119,10 @@ const FaceRenderer = ({
                         y={eyeY}
                         width={100}
                         height={110}
-                        scaleY={finalEyeScale}
-                        squeeze={eyeSqueeze}
-                        smile={eyeSmile}
-                        rotation={eyeRotation}
+                        scaleY={finalRightEyeScale}
+                        squeeze={rightEye.squeeze}
+                        smile={rightEye.smile}
+                        rotation={rightEye.rotation}
                         isLeft={false}
                         color={color}
                         glowIntensity={glowIntensity}
@@ -133,6 +133,7 @@ const FaceRenderer = ({
                         y={mouthYPos}
                         curve={finalMouthCurve}
                         openness={finalMouthOpenness}
+                        roundness={mouthRoundness}
                         color={color}
                         glowIntensity={glowIntensity}
                     />

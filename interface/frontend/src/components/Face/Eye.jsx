@@ -4,25 +4,25 @@ const Eye = ({
     x = 0,
     y = 0,
     scaleY = 1,
-    squeeze = 0, // 0 to 1 (1 = fully squeezed/happy)
-    smile = 0,   // -1 to 0.3 (0.3 = full smile, -1 = full eyelid)
-    rotation = 0, // -45 to 45
+    squeeze = 0, // 0에서 1 사이의 값 (1 = 완전히 찡그림/웃음)
+    smile = 0,   // -1에서 0.3 사이의 값 (0.3 = 활짝 웃음, -1 = 눈꺼풀이 내려옴)
+    rotation = 0, // -45에서 45도 사이의 회전값
     isLeft = true,
     width = 100,
     height = 110,
     color = "#FFFFFF",
     glowIntensity = 0.5
 }) => {
-    // Basic dimensions
+    // 기본 치수 계산
     const baseWidth = width + (squeeze * 20);
     const baseHeight = height * (1 - squeeze * 0.5);
     const r = squeeze > 0.5 ? 20 : (scaleY < 0.3 ? 5 : 40);
 
-    // Path Logic for "Smiling Eyes" and "Eyelids"
+    // "눈웃음" 및 "눈꺼풀" 동작을 위한 SVG 경로(Path) 로직
     const w2 = baseWidth / 2;
     const h2 = baseHeight / 2;
 
-    // Normal Rounded Rect Path
+    // 일반적인 둥근 사각형 경로 (Normal Rounded Rect Path)
     const normalPath = `
         M ${-w2 + r}, ${-h2} 
         L ${w2 - r}, ${-h2} 
@@ -36,7 +36,7 @@ const Eye = ({
         Z
     `.replace(/\s+/g, ' ');
 
-    // Smiling Eye Path (Bottom curves up)
+    // 웃는 눈 경로 (아래쪽 테두리가 위로 휘어짐)
     const smilePath = `
         M ${-w2 + r}, ${-h2} 
         L ${w2 - r}, ${-h2} 
@@ -48,8 +48,8 @@ const Eye = ({
         Z
     `.replace(/\s+/g, ' ');
 
-    // Eyelid Path (Top curves down)
-    // When smile is negative, we lower the top edge
+    // 눈꺼풀 경로 (위쪽 테두리가 아래로 휘어짐)
+    // smile 값이 음수일 때 위쪽 가장자리를 낮춥니다.
     const absSmile = Math.abs(smile);
     const lidPath = `
         M ${-w2}, ${-h2 + r + absSmile * h2} 
@@ -63,10 +63,8 @@ const Eye = ({
 
     const currentPath = smile > 0 ? smilePath : (smile < 0 ? lidPath : normalPath);
 
-    // Rotation: Left eye and right eye should rotate symmetrically
-    // If rotation is positive, left eye rotates clockwise, right eye rotates counter-clockwise?
-    // User requested "rotation +_ 45". Usually positive means "angry" or "focused".
-    // Let's make it so left eye uses -rotation and right eye uses +rotation for "angry" look when positive.
+    // 회전: 왼쪽 눈과 오른쪽 눈이 대칭적으로 회전하도록 설정합니다.
+    // 회전값이 양수일 때 왼쪽 눈은 시계 반대 방향, 오른쪽 눈은 시계 방향으로 회전하여 "화난" 또는 "집중한" 표정을 만듭니다.
     const finalRotation = isLeft ? -rotation : rotation;
 
     return (

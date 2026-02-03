@@ -29,20 +29,73 @@ const Slider = ({ label, value, onChange, min, max, step = 1, icon: Icon }) => (
 
 const FaceController = ({ params, setParams }) => {
     const handleChange = (key, value) => {
-        setParams(prev => ({ ...prev, [key]: value }));
+        if (key.includes('.')) {
+            const [parent, child] = key.split('.');
+            setParams(prev => ({
+                ...prev,
+                [parent]: {
+                    ...prev[parent],
+                    [child]: value
+                }
+            }));
+        } else {
+            setParams(prev => ({ ...prev, [key]: value }));
+        }
     };
 
     return (
-        // Floating Glass Panel - Black Glass Style
+        // 플로팅 글래스 패널 - 블랙 글래스 스타일의 디버깅 패널
         <div className="w-80 max-h-[90vh] bg-black/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 overflow-y-auto text-white shadow-2xl transition-all duration-300">
             <h2 className="text-xl font-bold mb-6 flex items-center tracking-tight text-white">
                 <Settings className="mr-2" size={20} />
                 Face Control
             </h2>
 
-            {/* Group: Eyes */}
+            {/* 그룹: 왼쪽 눈 (Left Eye) 제어 */}
             <div className="mb-6">
-                <h3 className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-4 border-b border-white/10 pb-2">Eyes</h3>
+                <h3 className="text-xs uppercase tracking-wider text-pink-400 font-semibold mb-4 border-b border-white/10 pb-2">Left Eye</h3>
+                <Slider
+                    label="눈 크기 (Openness)" value={params.leftEye.openness} min={0} max={1} step={0.01} icon={Eye}
+                    onChange={(v) => handleChange('leftEye.openness', v)}
+                />
+                <Slider
+                    label="눈웃음 / 눈꺼풀" value={params.leftEye.smile} min={-1} max={0.3} step={0.01} icon={Eye}
+                    onChange={(v) => handleChange('leftEye.smile', v)}
+                />
+                <Slider
+                    label="눈 회전" value={params.leftEye.rotation} min={-30} max={30} icon={Eye}
+                    onChange={(v) => handleChange('leftEye.rotation', v)}
+                />
+                <Slider
+                    label="찡그리기 (Squeeze)" value={params.leftEye.squeeze} min={0} max={1} step={0.01} icon={Eye}
+                    onChange={(v) => handleChange('leftEye.squeeze', v)}
+                />
+            </div>
+
+            {/* 그룹: 오른쪽 눈 (Right Eye) 제어 */}
+            <div className="mb-6">
+                <h3 className="text-xs uppercase tracking-wider text-blue-400 font-semibold mb-4 border-b border-white/10 pb-2">Right Eye</h3>
+                <Slider
+                    label="눈 크기 (Openness)" value={params.rightEye.openness} min={0} max={1} step={0.01} icon={Eye}
+                    onChange={(v) => handleChange('rightEye.openness', v)}
+                />
+                <Slider
+                    label="눈웃음 / 눈꺼풀" value={params.rightEye.smile} min={-1} max={0.3} step={0.01} icon={Eye}
+                    onChange={(v) => handleChange('rightEye.smile', v)}
+                />
+                <Slider
+                    label="눈 회전" value={params.rightEye.rotation} min={-30} max={30} icon={Eye}
+                    onChange={(v) => handleChange('rightEye.rotation', v)}
+                />
+                <Slider
+                    label="찡그리기 (Squeeze)" value={params.rightEye.squeeze} min={0} max={1} step={0.01} icon={Eye}
+                    onChange={(v) => handleChange('rightEye.squeeze', v)}
+                />
+            </div>
+
+            {/* 그룹: 시선 (Gaze) 제어 */}
+            <div className="mb-6">
+                <h3 className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-4 border-b border-white/10 pb-2">Gaze</h3>
                 <Slider
                     label="시선 좌우 (Gaze X)" value={params.gazeX} min={-40} max={40} icon={Move}
                     onChange={(v) => handleChange('gazeX', v)}
@@ -51,25 +104,9 @@ const FaceController = ({ params, setParams }) => {
                     label="시선 상하 (Gaze Y)" value={params.gazeY} min={-50} max={60} icon={Move}
                     onChange={(v) => handleChange('gazeY', v)}
                 />
-                <Slider
-                    label="눈 크기 (Openness)" value={params.eyeOpenness} min={0} max={1} step={0.01} icon={Eye}
-                    onChange={(v) => handleChange('eyeOpenness', v)}
-                />
-                <Slider
-                    label="눈웃음 / 눈꺼풀" value={params.eyeSmile} min={-0.3} max={0.3} step={0.01} icon={Eye}
-                    onChange={(v) => handleChange('eyeSmile', v)}
-                />
-                <Slider
-                    label="눈 회전" value={params.eyeRotation} min={-30} max={30} icon={Eye}
-                    onChange={(v) => handleChange('eyeRotation', v)}
-                />
-                <Slider
-                    label="찡그리기 (Squeeze)" value={params.eyeSqueeze} min={0} max={1} step={0.01} icon={Eye}
-                    onChange={(v) => handleChange('eyeSqueeze', v)}
-                />
             </div>
 
-            {/* Group: Mouth */}
+            {/* 그룹: 입 (Mouth) 제어 */}
             <div className="mb-6">
                 <h3 className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-4 border-b border-white/10 pb-2">Mouth</h3>
                 <Slider
@@ -88,9 +125,13 @@ const FaceController = ({ params, setParams }) => {
                     label="입 위치 상하" value={params.mouthY} min={-50} max={50} icon={Move}
                     onChange={(v) => handleChange('mouthY', v)}
                 />
+                <Slider
+                    label="입 오므리기 (Roundness)" value={params.mouthRoundness} min={0} max={1} step={0.01} icon={MessageSquare}
+                    onChange={(v) => handleChange('mouthRoundness', v)}
+                />
             </div>
 
-            {/* Group: Styling */}
+            {/* 그룹: 스타일 (Styling) 및 테마 제어 */}
             <div className="mb-6">
                 <h3 className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-4 border-b border-white/10 pb-2">스타일 (Style)</h3>
 
