@@ -21,46 +21,122 @@ class VisionBridge:
         self.sim_mode = GlobalConfig.SIM_MODE
         self.yolo = YoloDetector()
 
-        # 현재 모드에 맞는 소스 활성화
+        # [특징: Multi-Camera Support]
+        # 메인 카메라(월드)와 그리퍼 카메라(로컬) 드라이버를 모두 유지합니다.
+        # 필요에 따라 활성화된 소스(self.current_driver)를 교체하며 사용합니다.
+        self.drivers = {}
+        
         if self.sim_mode:
             self._setup_virtual_source()
         else:
             self._setup_real_source()
+            
+        self.current_source_key = 'main' # 'main' or 'gripper'
+        self.current_mode = "DEFAULT"    # "STEADYCAM", "EXPLORATION", "EXPLOITATION"
 
     def _setup_virtual_source(self):
         """시뮬레이션(PyBullet) 비전 소스를 구성합니다."""
-        self.driver = PybulletVision()
+        # Main Camera
+        main_cam = PybulletVision()
+        self.drivers['main'] = main_cam
+        
+        # Gripper Camera (PybulletVision 인스턴스 공유하되 별도 처리 가능하지만, 
+        # 여기서는 논리적 분리를 위해 드라이버 맵에 등록)
+        self.drivers['gripper'] = main_cam 
+        
         self.offset = CameraConfig.SIM_OFFSET
-        self.sim_mode = True
-        logging.info("[VisionBridge] 가상 비전(Simulation) 소스 연결됨.")
+        logging.info("[VisionBridge] 가상 비전(Simulation) 소스 연결됨 (Main + Gripper).")
 
     def _setup_real_source(self):
         """실물(RealSense) 비전 소스를 구성합니다."""
-        self.driver = RealSenseVision()
+        # TODO: 실제 환경에서도 그리퍼 카메라가 있다면 추가
+        self.drivers['main'] = RealSenseVision()
         self.offset = CameraConfig.REAL_OFFSET
-        self.sim_mode = False
         logging.info("[VisionBridge] 실물 비전(RealSense) 소스 연결됨.")
 
-    def switch_source(self, source: str):
+    def set_mode(self, mode: str):
         """
-        실시간으로 카메라 소스를 전환합니다. (UI 요청 등에 대응)
-        
+        비전 시스템의 운용 모드를 설정합니다.
         Args:
-            source: 'virtual' 또는 'real'
+            mode: "STEADYCAM", "EXPLORATION", "EXPLOITATION"
         """
-        from shared.ui_dto import CameraSource
-        if source == CameraSource.VIRTUAL:
-            self._setup_virtual_source()
+        self.current_mode = mode
+        
+        # 모드에 따른 카메라 자동 전환 로직
+        if mode == "EXPLOITATION":
+            # 정밀 조작 시 그리퍼 카메라 우선
+            self.switch_source('gripper')
         else:
-            self._setup_real_source()
-        logging.info(f"[VisionBridge] 비전 소스가 {source}로 전환되었습니다.")
+            # 탐색 및 일반 주행 시 메인 카메라 우선
+            self.switch_source('main')
+            
+        logging.info(f"[VisionBridge] 비전 모드 변경: {mode} (Source: {self.current_source_key})")
+        
+        # 시스템 상태에도 반영
+        system_state.camera_mode = mode
+
+    def switch_source(self, source_key: str):
+        """
+        실시간으로 카메라 소스를 전환합니다.
+        Args:
+            source_key: 'main', 'gripper'
+        """
+        if source_key not in self.drivers:
+            logging.warning(f"[VisionBridge] 알 수 없는 소스: {source_key}")
+            return
+            
+        if not self.sim_mode and source_key == 'gripper':
+             logging.warning("[VisionBridge] 그리퍼 카메라는 시뮬레이션 모드에서만 지원됩니다.")
+             return
+
+        self.current_source_key = source_key
+        logging.info(f"[VisionBridge] 카메라 소스 활성화: {source_key}")
+
+    def _fetch_packet(self):
+        """현재 설정된 소스 타입에 따라 적절한 패킷을 가져옵니다."""
+        driver = self.drivers.get('main') # 기본 드라이버 인스턴스
+        
+        if self.sim_mode and self.current_source_key == 'gripper':
+            # PybulletVision의 capture_gripper 호출
+            return driver.capture_gripper()
+        else:
+            return driver.get_synced_packet()
 
     def get_raw_frame(self):
         """
         VLM 분석 등을 위해 보정되지 않은 순수 원본 영상 프레임을 반환합니다.
+        추가로 Focus Score(선명도)를 계산하여 SystemState에 업데이트합니다.
         """
-        packet = self.driver.get_synced_packet()
-        return packet.get("color") if packet else None
+        packet = self._fetch_packet()
+        if not packet: return None
+        
+        color_frame = packet.get("color")
+        
+        # [Focus Score Update]
+        if color_frame is not None:
+             # 드라이버(VisionBase)에 구현된 선명도 측정 사용
+             driver = self.drivers.get('main')
+             score = driver.measure_focus_score(color_frame)
+             system_state.focus_score = round(score, 2)
+             
+        return color_frame
+
+    def get_gripper_frame(self):
+        """
+        [Helper] 그리퍼 카메라의 영상을 별도로 가져옵니다 (멀티뷰 디버깅용).
+        """
+        if 'gripper' not in self.drivers: return None
+        
+        driver = self.drivers['gripper']
+        # Sim Mode: same instance, use capture_gripper
+        if self.sim_mode:
+            # 디버깅용이므로 뎁스 데이터는 제외하여 속도 향상
+            packet = driver.capture_gripper(include_depth=False)
+            return packet.get("color") if packet else None
+        else:
+            # Real Mode: if separate driver exists
+            # TODO: 실물 그리퍼 카메라 드라이버 연동
+            return None
 
     def get_refined_detections(self) -> list:
         """
@@ -72,8 +148,8 @@ class VisionBridge:
         3. ROI 분석 및 적응형 깊이 추정 (Spherical Compensation)
         4. 카메라 오프셋 보정 및 로봇 베이스 좌표 산출
         """
-        # 1. 동기화 패킷 획득
-        packet = self.driver.get_synced_packet()
+        # 1. 동기화 패킷 획득 (현재 소스에 따라 변경)
+        packet = self._fetch_packet()
         if not packet:
             return []
 
@@ -123,15 +199,42 @@ class VisionBridge:
             
             if depth_m <= 0.1: continue
 
+            if depth_m <= 0.1: continue
+
             # 4. 픽셀-to-3D 변환 (cm 단위)
-            coords_cm = self.driver.pixel_to_cm(u, v, depth_m)
+            coords_cm = None 
+            log_type = "Unknown"
+            
+            # [Dynamic Kinematics] 그리퍼 카메라(Local) 처리
+            if self.sim_mode and self.current_source_key == 'gripper':
+                # 4-1. 카메라 기준 로컬 좌표 획득
+                coords_local = self.drivers['gripper'].pixel_to_local_cm(u, v, depth_m)
+                
+                if coords_local:
+                    # 4-2. 로봇 데이터에서 관절값(Wrist Roll)과 EE 포즈 획득
+                    # captured_pose는 EE(End Effector)의 월드 좌표 + 오리엔테이션
+                    ee_pos = captured_pose.get('pos', [0,0,0]) # [x, y, z]
+                    ee_orn = captured_pose.get('orn', [0,0,0,1]) # [x, y, z, w]
+                    
+                    # 4-3. [Dynamic Kinematics] 좌표계 변환: View -> EE Local -> World
+                    # pybullet_sim.py 분석 결과 오프셋은 0이며, 회전 변환만 수행하면 됨
+                    from sensor.projection import pybullet_projection
+                    
+                    coords_cm = pybullet_projection.project_gripper_camera_to_world(coords_local, ee_pos, ee_orn)
+                    log_type = "그리퍼(Dynamic 6-DOF 보정)"
+                    
+            # [Standard] 메인 카메라/월드 카메라 처리
+            else:
+                coords_cm = self.drivers['main'].pixel_to_cm(u, v, depth_m)
             
             if coords_cm:
                 # 5. [좌표계 통합] 카메라 좌표 -> 로봇 베이스 좌표
-                # 시뮬레이션은 이미 월드 좌표이므로 오프셋 불필요
-                if type(self.driver).__name__ == "PybulletVision":
+                if self.current_source_key == 'gripper':
+                     # 이미 위에서 World 좌표로 변환됨
+                     rx, ry, rz = coords_cm
+                elif type(self.drivers['main']).__name__ == "PybulletVision":
                     rx, ry, rz = coords_cm
-                    log_type = "월드(GT보정: 실제 정답값 기준)"
+                    log_type = "월드(GT보정)"
                 else:
                     # 실물은 카메라 위치 오프셋(설치 위치 차이)을 더함
                     rx = coords_cm[0] + self.offset["x"]
@@ -148,7 +251,7 @@ class VisionBridge:
                     "sync_pose": captured_pose
                 })
                 
-        return refined_list
+        return refined_list, color_frame
 
     # NOTE: 백그라운드 업데이트 루프는 PerceptionManager에서 통합 관리하므로
     # 이 클래스 내부의 중복된 루프 로직은 제거되었습니다.

@@ -93,3 +93,4 @@ class SystemSnapshot(BaseModel):
     
     # 시각화 데이터
     last_frame: Optional[str] = Field(None, description="[Layer 1] Base64로 인코딩된 실시간 카메라 프레임")
+    last_ee_frame: Optional[str] = Field(None, description="[Layer 1] Base64로 인코딩된 그리퍼 카메라 프레임")

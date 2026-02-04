@@ -9,7 +9,7 @@ class StateBroadcaster:
     LogicBrain이 상태를 발행하고 감정 시스템/UI가 이를 구독할 때 사용하는 싱글톤 브로드캐스터입니다.
     """
     _instance = None
-    _lock = threading.Lock()
+    _lock = threading.RLock()
     
     def __new__(cls):
         if cls._instance is None:
@@ -27,6 +27,7 @@ class StateBroadcaster:
             "episode_result": "none",  # 성공(success), 실패(failure)
             "robot_status": "ok",      # 정상(ok), 오류(error)
             "chat_history": [],        # List of {"role": "bot", "text": "..."} 채팅 대화 이력으로 최대 20개까지만 유지
+            "events": [],              # [Fix] 이벤트 버퍼 (순간적인 신호 유실 방지), 최대 50개 유지
             "timestamp": time.time()
         }
     
@@ -75,6 +76,32 @@ class StateBroadcaster:
                 sub(snapshot)
             except Exception as e:
                 print(f"[Broadcaster] 구독자 오류: {e}")
+
+    def publish_event(self, event_type: str, payload: Dict[str, Any]):
+        """
+        일시적인 이벤트(Event)를 발행합니다. 
+        상태(State)와 달리 덮어쓰지 않고 큐에 쌓이며, UI가 폴링할 때 유실되지 않도록 보존합니다.
+        """
+        import uuid
+        with self._lock:
+            event = {
+                "id": str(uuid.uuid4()),
+                "type": event_type,
+                "timestamp": time.time(),
+                "payload": payload
+            }
+            # 이벤트 버퍼에 추가
+            events = self.latest_state.get("events", [])
+            events.append(event)
+            if len(events) > 50: events = events[-50:] # 최대 50개 유지
+            self.latest_state["events"] = events
+            
+            snapshot = self.latest_state.copy()
+
+        # 구독자 알림
+        for sub in self.subscribers:
+            try: sub(snapshot)
+            except: pass
 
     def get_snapshot(self) -> Dict[str, Any]:
         with self._lock:

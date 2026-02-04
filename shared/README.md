@@ -10,7 +10,7 @@
 ### 1. ⚙️ [config.py](file:///d:/ARMY/MACH_VII_v2.0/shared/config.py) - 시스템 설정 및 경로 관리
 시스템의 모든 '규칙'과 '지도'가 정의된 지점입니다.
 - **`PathConfig`**: `pathlib`을 사용하여 프로젝트 전체의 7개 레이어 경로를 절대 경로로 관리합니다. 하드코딩을 방지하고 유연한 경로 참조를 제공합니다.
-- **`GlobalConfig`**: `SIM_MODE`(시뮬레이션/실물 스위치), VLM 엔드포인트 및 모델명, 서버 포트, 로봇 IP 등 전역 설정을 중앙 집중 관리합니다.
+- **`GlobalConfig`**: `SIM_MODE`(시뮬레이션/실물 스위치), VLM 엔드포인트 및 모델명, 서버 포트, 로봇 IP 등 전역 설정을 중앙 집중 관리합니다. 최근 **PyBullet 커넥션 타임아웃 최적화(3s)**를 통해 부팅 속도를 개선했습니다.
 
 ### 2. 📝 [ui_dto.py](file:///d:/ARMY/MACH_VII_v2.0/shared/ui_dto.py) - 데이터 교환 규격
 레이어 간, 특히 UI(React)와 백엔드(FastAPI) 간의 통신을 위한 표준 객체(DTO)를 정의합니다.
@@ -23,6 +23,7 @@
 - **싱글톤 패턴**: 시스템 내 단 하나의 파이프라인 인스턴스만 존재하도록 보장합니다.
 - **7-Layer Flow**: `Brain -> Strategy -> Expression -> Embodiment -> Memory` 순서로 데이터가 흐르도록 제어합니다.
 - **최근 개선 사항**:
+    - **RLock Hardening**: 싱글톤 락을 `RLock`으로 업그레이드하여 동일 스레드 내 재귀적 호출 안전성을 확보했습니다.
     - **컴포넌트 캐싱**: `emotion_controller`를 직접 변수로 관리하여 반복적인 검색 성능을 최적화했습니다.
     - **의도 확인 로직**: `intent` 변환 과정을 `if-elif-else` 구조로 리팩토링하여 가독성과 안전성을 높였습니다.
 
@@ -34,6 +35,7 @@
 ### 5. 🎙️ [state_broadcaster.py](file:///d:/ARMY/MACH_VII_v2.0/shared/state_broadcaster.py) - 실시간 전광판
 시스템 내부의 변화를 구독자(UI 등)에게 실시간으로 알리는 메시지 허브입니다.
 - **Pub/Sub 패턴**: 하위 레이어나 브레인의 상태 변화를 `publish`하면, 등록된 `subscribers`에게 즉시 전파됩니다.
+- **Async-Safe Design**: 고속 루프 내 데드락 방지를 위해 브로드캐스트 호출을 락 블록 외부로 분리하는 정책이 적용되었습니다.
 - **Chat/Thought Logging**: 사용자와의 대화 및 로봇의 내부 사고 과정(Thought)을 분리하여 기록함으로써 스마트한 UI 구현을 돕습니다. (최근 20개 로그 유지)
 
 ### 6. 🧹 [filters.py](file:///d:/ARMY/MACH_VII_v2.0/shared/filters.py) - 데이터 정제 유틸리티

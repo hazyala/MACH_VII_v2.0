@@ -63,8 +63,9 @@ flowchart TD
     *   **IMU Expansion Ready**: 향후 하드웨어 기울기 보정을 위한 확장성 주석 완비.
 
 3.  **구조적 최적화 (Structural Optimization)**
-    *   **Unified Loop Control**: 중복된 업데이트 루프를 제거하고 `PerceptionManager` 하나로 통합하여 CPU 자원 자용 최적화.
-    *   **Encapsulation**: `__init__.py` 기반의 캡슐화로 타 레이어에서는 명확한 인터페이스만 노출.
+    *   **Unified Loop Control**: 중복된 업데이트 루프를 제거하고 `PerceptionManager` 하나로 통합하여 CPU 자원 사용 최적화.
+    *   **Multi-Camera Fusion**: `Main`(월드) 카메라와 `Gripper`(정밀) 카메라 스트림을 동시 처리하며, `DynamicKinematics`를 통한 실시간 회전 보정을 지원합니다.
+    *   **Intelligent Active Perception**: VLM 피드백 기반의 능동적 시점 탐색 스택(`Intelligent Eye`)과 연동되어 임무 성공률을 극대화합니다.
 
 ---
 

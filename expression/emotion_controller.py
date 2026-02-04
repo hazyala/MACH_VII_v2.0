@@ -1,6 +1,7 @@
 import threading
 import time
 import asyncio
+import uuid
 from typing import Dict
 from state.emotion_state import EmotionVector
 from shared.state_broadcaster import broadcaster
@@ -14,10 +15,16 @@ class EmotionController:
         self.current_vector = EmotionVector()
         self.target_vector = EmotionVector()
         self.running = False
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         
         # 우선순위 제어를 위한 타임스탬프 (파이프라인 업데이트 보호용)
         self.manual_override_until = 0.0
+        
+        self.last_preset_id = "neutral"
+        self.muscles = {}
+        
+        # Heartbeat 타이머
+        self.last_heartbeat_time = 0.0
         
         # 브레인 이벤트 구독
         broadcaster.subscribe(self.on_brain_state_change)
@@ -31,17 +38,20 @@ class EmotionController:
         agent_state = state.get("agent_state", "IDLE")
         
         with self._lock:
-            if agent_state == "PLANNING":
+            if agent_state == "PLANNING": # THINKING
                 self.target_vector.focus = 0.8
                 self.target_vector.effort = 0.3
+                self.target_vector.curiosity = 0.7 # 생각 중엔 호기심도
             elif agent_state == "EXECUTING":
                 self.target_vector.focus = 1.0
                 self.target_vector.effort = 0.6
+                self.target_vector.confidence = 0.5
             elif agent_state == "IDLE":
-                self.target_vector.focus = 0.3
+                self.target_vector.focus = 0.1
                 self.target_vector.effort = 0.0
                 self.target_vector.frustration = 0.0
                 self.target_vector.confidence = 0.5 
+                self.target_vector.curiosity = 0.3
             elif agent_state == "RECOVERING": 
                 self.target_vector.focus = 0.5
                 self.target_vector.frustration = 0.9 
@@ -52,11 +62,12 @@ class EmotionController:
                 self.target_vector.frustration = 0.0
                 self.target_vector.confidence = 1.0 
                 self.target_vector.effort = 0.0
+                self.target_vector.curiosity = 0.5
 
     def update_target(self, new_target: Dict[str, float], duration: float = 3.0):
         """
-        파이프라인 등에서 감정 목표를 명시적으로 조정할 때 호출합니다. 
-        일정 시간(duration) 동안 상태 기반 자동 업데이트를 차단합니다.
+        [Restored] 파이프라인/Updater에서 감정 벡터 목표를 조정할 때 호출.
+        Vector System -> Pulse System으로의 다리 역할을 합니다.
         """
         with self._lock:
             self.manual_override_until = time.time() + duration
@@ -64,10 +75,30 @@ class EmotionController:
                 if hasattr(self.target_vector, k):
                     setattr(self.target_vector, k, v)
 
+    def broadcast_emotion_event(self, preset_id: str, weight: float = 1.0, duration: float = 3.0):
+        """
+        [Emotion Pulse] 감정 사건(Event)을 발생시켜 프론트엔드로 브로드캐스트합니다.
+        """
+        print(f"[Emotion] Broadcasting Event: {preset_id} (w={weight:.2f}, d={duration}s)")
+        
+        # [Fix] 유실 방지 Event Buffer
+        broadcaster.publish_event("emotion_pulse", {
+            "preset": preset_id,
+            "weight": weight,
+            "duration": duration
+        })
+
+    def force_preset(self, preset_id: str):
+        """
+        [Legacy Support]
+        """
+        self.broadcast_emotion_event(preset_id, weight=1.0, duration=5.0)
+
     def step(self, dt: float):
-        """현재 상태를 목표 상태로 보간하고, 물리 표현 파라미터(Muscles)를 계산합니다."""
+        """현재 상태를 목표 상태로 보간하고 상태 유지를 위한 Heartbeat를 쏩니다."""
         smoothing_factor = 2.0 * dt # 속도 조절
         
+        new_preset = "neutral"
         with self._lock:
             curr = self.current_vector
             tgt = self.target_vector
@@ -79,37 +110,42 @@ class EmotionController:
             curr.frustration += (tgt.frustration - curr.frustration) * smoothing_factor
             curr.curiosity += (tgt.curiosity - curr.curiosity) * smoothing_factor
 
-            # 2. [Phase 2] 물리 표현 파라미터 계산 비활성화 (Preset Priority)
-            # 프론트엔드의 정교한 프리셋(Bezier Curve 등)이 백엔드의 단순 수식보다 훨씬 고품질이므로,
-            # 백엔드는 이제 '어떤 프리셋을 쓸지(States)'만 결정하고, 세부 근육 제어는 하지 않습니다.
-            # 만약 백엔드가 muscles 값을 보내면 프론트엔드가 이를 덮어써서 표정이 '망가질(Mangle)' 위험이 있습니다.
-            
-            # self.muscles = { ... } # DEPRECATED: Legacy Dumb UI Logic
-            self.muscles = {} 
-
-            
-            # 3. [Phase 2] 전역 SystemState 동기화 (Single Source of Truth 준수)
-            # Brain 등 다른 레이어가 최신 감정 상태를 알 수 있도록 system_state.emotion을 업데이트합니다.
+            # 2. SystemState 동기화
             from state.system_state import system_state
-            
-            # 벡터 값 복사 (Deep Copy or Field Copy)
-            # lock 내부이므로 안전하게 복사
             system_state.emotion.focus = curr.focus
             system_state.emotion.effort = curr.effort
             system_state.emotion.confidence = curr.confidence
             system_state.emotion.frustration = curr.frustration
             system_state.emotion.curiosity = curr.curiosity
             
-            # [Phase 2] 프리셋 변경 감지 및 로깅
-            self._check_preset_change()
+            # 3. 프리셋 변경 감지 (락 내부에서는 계산만 수행)
+            new_preset = self.get_closest_preset()
+            
+        # --- LOCK RELEASED ---
+        
+        # 3. 브로드캐스트 (락 밖에서 수행하여 콜백 데드락 방지)
+        if new_preset != self.last_preset_id:
+            print(f"[Emotion] Vector State Changed: {self.last_preset_id.upper()} -> {new_preset.upper()}")
+            self.last_preset_id = new_preset
+            if new_preset != 'neutral':
+                 self.broadcast_emotion_event(new_preset, weight=1.0, duration=5.0)
+                 
+        # 4. [New] Heartbeat (락 밖에서 수행)
+        if new_preset != 'neutral':
+            now = time.time()
+            if now - self.last_heartbeat_time > 0.5:
+                # [Fix] 데드락 방지를 위해 publish_event를 락 밖에서 호출
+                broadcaster.publish_event("emotion_pulse", {
+                    "preset": new_preset,
+                    "weight": 0.6,
+                    "duration": 1.0
+                })
+                self.last_heartbeat_time = now
 
     def get_closest_preset(self) -> str:
         """
         현재 감정 벡터(6차원)를 기반으로 프론트엔드의 20가지 프리셋 중 가장 적절한 ID를 도출합니다.
-        단순 임계값(Threshold) 로직을 사용하여 계산 비용을 최소화합니다.
         """
-        # Lock은 호출자가 잡고 있다고 가정하거나, 필요한 경우 추가 사용
-        # 여기서는 값을 읽기만 하므로 안전하다고 가정
         vec = self.current_vector
         
         # 1. 극단적인 감정 상태 우선 확인 (High Intensity)
@@ -142,35 +178,25 @@ class EmotionController:
         return "neutral"
 
     def _check_preset_change(self):
-        """감정 프리셋이 변경되었는지 확인하고 로그를 출력합니다."""
-        # 주의: 이 메소드는 _lock 내부에서 호출되어야 함
+        """감정 프리셋이 변경되었는지 확인하고 이벤트를 발생시킵니다."""
         new_preset = self.get_closest_preset()
         
         if new_preset != self.last_preset_id:
-            # 로그 출력 (YOLO 탐지 포맷과 유사하게)
-            # 예: [Emotion] Status Changed: neutral -> happy (conf: 0.85)
-            # 주요 원인 벡터 요소 찾기
+            # 상태 변경 시에는 강한 펄스 전송
             vec = self.current_vector
-            cause = "neutral"
-            max_val = 0.0
-            
-            # 가장 높은 값을 가진 감정 요소를 '원인'으로 표시
-            for k, v in vec.__dict__.items():
-                if isinstance(v, (int, float)) and v > max_val:
-                    max_val = v
-                    cause = k
-            
-            print(f"[Emotion] Status Changed: {self.last_preset_id.upper()} -> {new_preset.upper()} "
-                  f"({cause}: {max_val:.2f})")
+            print(f"[Emotion] Vector State Changed: {self.last_preset_id.upper()} -> {new_preset.upper()}")
             
             self.last_preset_id = new_preset
+            
+            if new_preset != 'neutral':
+                 self.broadcast_emotion_event(new_preset, weight=1.0, duration=5.0)
 
     def start(self):
         """60Hz 보간 루프를 시작합니다."""
         if self.running: return
         self.running = True
-        self.muscles = {} # 파라미터 초기화
-        self.last_preset_id = "neutral" # [Phase 2] 초기 프리셋
+        self.muscles = {} 
+        self.last_preset_id = "neutral" 
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
         print("[Emotion] 컨트롤러 시작됨 (60Hz).")
@@ -194,12 +220,11 @@ class EmotionController:
 
     def get_current_emotion(self):
         with self._lock:
-            # [Phase 2] DTO 호환성을 위해 preset_id 포함
             preset = self.get_closest_preset()
             return {
                 "vector": self.current_vector.to_dict(),
                 "preset_id": preset,
-                "muscles": self.muscles
+                "muscles": {}
             }
 
 # 싱글톤 인스턴스

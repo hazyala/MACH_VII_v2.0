@@ -98,10 +98,15 @@
 *   성공 / 실패 / 상태 변화
 *   Vector DB, 로그 시스템 → **학습의 재료 제공**
 
-### 8️⃣ Async Visual Servoing (New)
-*   Layer 4(Strategy) 내에서 독립적으로 동작하는 **비동기 자율 신경계**입니다.
-*   **5단계 행동 강령(State Machine)**을 통해 부드러운 실시간 추적을 수행합니다.
-*   상위 레이어의 간섭 없이 고속(20Hz) 피드백 루프를 유지합니다.
+### 8️⃣ Intelligent Eye (Active Perception)
+*   **지능형 능동 인지**: 단순 관측을 넘어, VLM의 '인지 확신도(Task Confidence)'를 기반으로 로봇이 스스로 가장 잘 보이는 위치를 찾아가는 시스템입니다.
+*   **7-Layer 협업**: Perception(L1)의 선명도 측정 + Strategy(L4)의 상태 기계(`SCANNING`, `AUTO_FOCUS`, `VLM_CHECK`) + Expression(L5)의 물리적 정렬이 결합됩니다.
+*   **고속 피드백**: 상위 레이어의 간섭 없이 독립적인 자율 신경계처럼 동작하며, 인식 불확실 시 스스로 각도를 수정(Retry)합니다.
+
+### 9️⃣ System Stability & Concurrency
+*   **RLock Hardening**: 모든 커널 싱글톤 및 컨트롤러에 `threading.RLock`을 적용하여 동일 스레드 내 재귀 호출로 인한 데드락을 원천 차단했습니다.
+*   **Async-Safe Broadcasting**: 고속 통신 루프 내에서 브로드캐스트 호출을 락 구간 외부로 분리하여 시스템 응답성을 극대화했습니다.
+*   **Optimized Startup**: PyBullet 커넥션 타임아웃 최적화(3s)를 통해 시뮬레이션 환경 유무와 관계없이 빠른 시스템 부팅을 보장합니다.
 
 ---
 

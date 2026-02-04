@@ -53,34 +53,60 @@ class PerceptionManager:
         while self.running:
             loop_start_time = time.time()
             try:
-                # 1. 시각 탐지 및 3D 좌표 산출
-                # VisionBridge를 통해 필터링된 객체 리스트를 가져옵니다.
-                detections = self.bridge.get_refined_detections()
+                # 1. 시각 탐지 및 3D 좌표 산출 (Main Camera 기준)
+                # VisionBridge를 통해 필터링된 객체 리스트와 당시의 프레임을 함께 가져옵니다.
+                detections, main_frame = self.bridge.get_refined_detections()
                 
-                # 2. VLM 분석용 프레임 획득 및 인코딩
-                # Brain Layer의 시각 분석(VLM: Visual-Language Model - 영상을 보고 상황을 설명해주는 시각-언어 모델)을 위해 
-                # 원본 영상을 Base64(텍스트 형태의 데이터 변환 방식)로 미리 준비합니다.
-                raw_frame = self.bridge.get_raw_frame()
-                image_b64 = None
-                if raw_frame is not None:
-                     # 전송량 최적화를 위해 JPEG 품질을 70%로 조정하여 인코딩
-                     ret, buffer = cv2.imencode('.jpg', raw_frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                     if ret:
-                         image_b64 = base64.b64encode(buffer).decode('utf-8')
-
-                # 3. 전역 상태(Layer 2: State) 업데이트
-                # 모든 레이어가 공통으로 참조하는 system_state에 인지 결과 기록
+                # 2. 전역 상태(Layer 2: State) 업데이트
                 new_perception = {
                     "detected_objects": detections,
                     "detection_count": len(detections),
                     "timestamp": time.time(),
                     "sensor_mode": "Sim" if GlobalConfig.SIM_MODE else "Real"
                 }
-                
                 system_state.perception_data = new_perception
-                if image_b64:
-                    system_state.last_frame_base64 = image_b64
                 
+                # [Optimization] 탐지에 사용된 동일 프레임을 Base64로 인코딩하여 UI 전달
+                if main_frame is not None:
+                     # 전송량 최적화를 위해 JPEG 품질을 75%로 조정
+                     ret, buffer = cv2.imencode('.jpg', main_frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+                     if ret:
+                         system_state.last_frame_base64 = base64.b64encode(buffer).decode('utf-8')
+                    
+                # 2-2. [Secondary Stream] 그리퍼 카메라 프레임 획득 (디버깅용)
+                # 메인 뷰와 별개로 그리퍼의 시점을 상시 확보합니다.
+                gripper_frame = self.bridge.get_gripper_frame()
+                if gripper_frame is not None:
+                     ret, buffer_ee = cv2.imencode('.jpg', gripper_frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                     if ret:
+                         system_state.last_ee_frame_base64 = base64.b64encode(buffer_ee).decode('utf-8')
+                else:
+                    # 그리퍼 카메라 미수신 시 상태 초기화 (옵션)
+                    # system_state.last_ee_frame_base64 = None
+                    pass
+                
+                # [Control Tower] 로봇 상태 동기화 및 안전 감시
+                # 시뮬레이션 클라이언트로부터 최신 로봇 상태를 가져와 SystemState에 반영합니다.
+                if GlobalConfig.SIM_MODE:
+                    from interface.backend.sim_client import pybullet_client
+                    with pybullet_client.lock:
+                        robot_info = pybullet_client.latest_state.get('robot', {})
+                    
+                    # 관절 상태 및 그리퍼 상태 동기화
+                    # robot_info 구조: {'joints': [...], 'ee': {...}, 'gripper': 0.05, 'status': 'IDLE'} 가정
+                    system_state.robot.gripper_state = robot_info.get('gripper', 0.0)
+                    
+                    # 물리 엔진 상태(arm_status) 모니터링: "STUCK", "MOVING", "IDLE"
+                    current_status = robot_info.get('status', 'IDLE')
+                    system_state.robot.arm_status = current_status
+                    
+                    # Safety Loop: "STUCK" 상태 감지 시 즉시 안전 플래그 설정
+                    if current_status == "STUCK":
+                        system_state.robot.is_unsafe = True
+                        logging.critical("[Control Tower] 🚨 로봇 끼임(STUCK) 감지! 안전 모드 발동됨.")
+                    else:
+                        system_state.robot.is_unsafe = False
+
                 # 4. 상태 전파 (Layer 1 -> Other Layers)
                 # UI나 다른 레이어에서 비전 이벤트를 실시간으로 처리할 수 있도록 알림 발행(Broadcasting: 여러 곳에 동시에 알림)
                 broadcaster.publish("perception", new_perception)

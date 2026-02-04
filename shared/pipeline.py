@@ -18,7 +18,7 @@ class SystemPipeline:
     순서로 데이터가 흐르도록 제어합니다.
     """
     _instance = None
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     def __new__(cls):
         if cls._instance is None:
@@ -131,7 +131,8 @@ class SystemPipeline:
                 "mode": system_state.robot.current_mode
             },
             strategy=strategy_manager.get_context().copy(), # 복사본 사용
-            last_frame=system_state.last_frame_base64
+            last_frame=system_state.last_frame_base64,
+            last_ee_frame=system_state.last_ee_frame_base64
         )
         
         return snapshot.dict()

@@ -13,7 +13,7 @@ class RobotController:
     동작 큐(Action Queue)를 사용하여 명령의 순차적 실행을 보장합니다.
     """
     def __init__(self):
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.robot_driver = RobotFactory.get_robot()
         self.running = False
         self.last_intent = None

@@ -33,6 +33,17 @@ class PybulletVision(VisionBase):
         self.filter_y = KalmanFilter(process_variance=1e-3, measurement_variance=1e-4)
         self.filter_z = KalmanFilter(process_variance=1e-3, measurement_variance=1e-4)
         
+    def pixel_to_local_cm(self, u: int, v: int, depth_val: float):
+        """
+        [New] 픽셀 좌표를 카메라 기준 3D 로컬 좌표(cm)로 변환합니다.
+        월드 좌표계 변환 전의 순수 카메라 기준 위치가 필요할 때(예: 그리퍼 카메라) 사용합니다.
+        """
+        if depth_val <= 0:
+            return None
+            
+        # [Helper] 로컬 뷰 좌표 반환
+        return pybullet_projection.pixel_to_view_space(u, v, depth_val)
+
     def pixel_to_cm(self, u: int, v: int, depth_val: float):
         """
         [Override: 재정의] 시뮬레이션 특화 좌표 변환 및 보정 로직입니다.
@@ -98,3 +109,9 @@ class PybulletVision(VisionBase):
         현재 시뮬레이션 깊이 지도를 반환합니다.
         """
         return self.client.get_depth_frame()
+
+    def capture_gripper(self, include_depth: bool = True):
+        """
+        [Gripper Camera] 엔드 이펙터 카메라의 동기화된 패킷을 반환합니다.
+        """
+        return self.client.get_ee_synced_packet(include_depth=include_depth)

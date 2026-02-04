@@ -15,6 +15,11 @@ class ServoState(Enum):
     IDLE = auto()
     DETECT = auto()
     VISUAL_SERVO = auto()  # 연속 제어 루프
+    # [Thinking Eye] 능동 인지 상태 추가
+    AUTO_FOCUS = auto()    # Z축 최적화 (광학적 선명도 확보)
+    VLM_CHECK = auto()     # VLM 검증 ("이거 확실해?")
+    SCANNING = auto()      # 그리퍼 회전/이동 (더 잘 보이는 각도 찾기)
+    
     GRASP = auto()
     # LIFT, VERIFY 제거 (Agent 주도)
     SUCCESS = auto()
@@ -119,15 +124,47 @@ class VisualServoing:
                             self._detect_retry = retry_count + 1
                 
                 elif self.current_state == ServoState.VISUAL_SERVO:
-                    # 연속 제어 피드백 루프
+                    # 연속 제어 피드백 루프 (접근 단계)
                     if self._visual_servo_loop(target_label, get_ee_position, move_robot):
-                        logging.info("[VisualServo] 목표 위치 도달 완료!")
-                        broadcaster.publish("agent_thought", 
-                                          "[VisualServoing] 목표 위치 도달")
-                        self._transition(ServoState.GRASP)
+                        logging.info("[VisualServo] 1차 접근 완료. 정밀 인지 단계로 진입합니다.")
+                        # 바로 GRASP하지 않고, Auto-Focus -> VLM Check 로 진입
+                        self._transition(ServoState.AUTO_FOCUS)
                     else:
                         self._transition(ServoState.FAIL)
-                
+                        
+                elif self.current_state == ServoState.AUTO_FOCUS:
+                    # [Step 1] 광학적 초점 최적화 (Hill Climbing)
+                    if self._execute_auto_focus(get_ee_position, move_robot):
+                        self._transition(ServoState.VLM_CHECK)
+                    else:
+                        logging.warning("[AUTO_FOCUS] 초점 확보 실패 (또는 범위 초과). 그대로 진행합니다.")
+                        self._transition(ServoState.VLM_CHECK)
+                        
+                elif self.current_state == ServoState.VLM_CHECK:
+                    # [Step 2] VLM 검증 ("확실한가?")
+                    # 로봇 정지 후 이미지 분석 요청
+                    check_result = self._execute_vlm_check()
+                    
+                    if check_result == "CONFIDENT":
+                        logging.info("[VLM] 인지 확신! 파지 단계로 이동.")
+                        self._transition(ServoState.GRASP)
+                    elif check_result == "UNCERTAIN":
+                        logging.warning("[VLM] 인지 불확실. 능동 탐색(Scanning) 시작.")
+                        self._transition(ServoState.SCANNING)
+                    else:
+                        logging.error("[VLM] 판단 불가. 실패 처리.")
+                        self._transition(ServoState.FAIL)
+                        
+                elif self.current_state == ServoState.SCANNING:
+                    # [Step 3] 능동 탐색 (그리퍼 회전)
+                    # 현재 각도에서 +/- 30도 회전하며 후보지 탐색
+                    if self._execute_active_scanning(get_ee_position, move_robot):
+                        # 자세 변경 후 다시 초점 -> VLM 체크
+                        self._transition(ServoState.AUTO_FOCUS)
+                    else:
+                        logging.error("[SCANNING] 모든 탐색 시도 실패.")
+                        self._transition(ServoState.FAIL)
+                        
                 elif self.current_state == ServoState.GRASP:
                     logging.info("[GRASP] 그리퍼 닫기")
                     broadcaster.publish("agent_thought", 
@@ -137,17 +174,59 @@ class VisualServoing:
                     move_gripper(0)
                     logging.info("[GRASP] 그리퍼 닫는 중... (3.5초 대기)")
                     
-                    # PyBullet은 그리퍼 상태 피드백이 없음
-                    # 충분한 대기 시간으로 완전 닫힘 보장: 3.5초
-                    if self.cancel_token.wait(3.5):
+                    # [Improvement] 동적 그리퍼 상태 모니터링
+                    # 고정 3.5초 대기 대신, 그리퍼가 움직임을 멈출 때까지 감시합니다.
+                    
+                    start_grasp_time = time.time()
+                    last_gripper_val = system_state.robot.gripper_state
+                    stable_count = 0
+                    
+                    logging.info("[GRASP] 그리퍼 상태 모니터링 시작...")
+                    
+                    while time.time() - start_grasp_time < 3.5:
+                        if self.cancel_token.is_set():
+                            break
+                            
+                        current_val = system_state.robot.gripper_state
+                        
+                        # 변화량이 미미하면 stable 카운트 증가
+                        if abs(current_val - last_gripper_val) < 0.0005:
+                            stable_count += 1
+                        else:
+                            stable_count = 0 # 다시 움직이면 리셋
+                            
+                        last_gripper_val = current_val
+                        
+                        # 0.5초(10틱) 이상 변화 없으면 동작 완료로 판단
+                        if stable_count >= 10:
+                            logging.info(f"[GRASP] 그리퍼 동작 완료 감지 (Stable at {current_val:.4f})")
+                            break
+                            
+                        time.sleep(0.05)
+                        
+                    if self.cancel_token.is_set():
                         logging.warning("[GRASP] 취소됨")
                         break
                     
-                    logging.info("[GRASP] ✅ 그리퍼 완전히 닫힘 (3.5초 대기 완료)")
+                    # [Grasp Verification] 그리퍼 상태 확인
+                    # system_state.robot.gripper_state는 두 핑거 각도의 합(또는 너비)입니다.
+                    # 0.0에 가까우면(완전히 닫힘) 공기를 잡은 것이고, 
+                    # 0.0보다 크면(중간에 멈춤) 물체를 잡은 것입니다.
+                    current_gripper = system_state.robot.gripper_state
+                    logging.info(f"[GRASP] 그리퍼 최종 상태: {current_gripper:.4f}")
                     
-                    # [Agent Control] 들어올리지 않고 여기서 성공 종료
-                    logging.info("[GRASP] 파지 완료. 제어권을 반환합니다.")
-                    success = True
+                    if current_gripper > 0.005: # 완전히 닫히지 않음 (=물체 파지)
+                        logging.info("[GRASP] ✅ 물체 파지 확인 (Grasp Success)")
+                        broadcaster.publish("agent_thought", f"[VisualServoing] 물체 파지 성공 (Width: {current_gripper:.3f})")
+                        success = True
+                    else:
+                        logging.warning("[GRASP] ❌ 빈손 감지 (Grasp Failed - Fully Closed)")
+                        broadcaster.publish("agent_thought", "[VisualServoing] 파지 실패 (빈손)")
+                        success = False
+                        self._transition(ServoState.FAIL)
+                        break
+
+                    logging.info("[GRASP] 제어권을 반환합니다.")
                     break
                 
                 # LIFT, VERIFY 단계 제거됨
@@ -319,6 +398,117 @@ class VisualServoing:
         """상태 전이 및 로깅"""
         logging.info(f"[VisualServoing] 상태 전환: {self.current_state.name} → {next_state.name}")
         self.current_state = next_state
+
+    def _execute_auto_focus(self, get_ee_position, move_robot) -> bool:
+        """
+        [AUTO_FOCUS] Hill Climbing 알고리즘으로 Z축 최적화 (선명도 최대화)
+        """
+        logging.info("[AUTO_FOCUS] 오토 포커스(Hill Climbing) 시작")
+        
+        step_size = 0.5 # 0.5cm 단위 이동
+        max_range = 5.0 # 최대 5cm 탐색
+        current_z_offset = 0.0
+        
+        # 초기 Score 측정
+        best_score = system_state.focus_score
+        direction = 1 # +Z 방향 (위로) 먼저 시도
+        
+        # 안전 장치: 시작 위치 저장
+        start_pos = get_ee_position()
+        
+        for i in range(10): # 최대 10회 이동 제한
+            if self.cancel_token.is_set(): return False
+            
+            # 이동
+            target_z = start_pos['z'] + current_z_offset + (step_size * direction)
+            
+            # 범위 체크
+            if abs(target_z - start_pos['z']) > max_range:
+                logging.warning("[AUTO_FOCUS] 최대 탐색 범위 도달")
+                break
+                
+            move_robot(start_pos['x'], start_pos['y'], target_z, 15) # 느린 속도로 이동
+            time.sleep(0.5) # 안정화 대기
+            
+            new_score = system_state.focus_score
+            logging.info(f"[AUTO_FOCUS] Z={target_z:.2f}, Score={new_score:.2f} (Best={best_score:.2f})")
+            
+            if new_score > best_score + 10.0: # 유의미한 향상 (Threshold 10.0)
+                best_score = new_score
+                current_z_offset += (step_size * direction)
+            else:
+                # 점수가 떨어지거나 비슷하면 방향 전환 또는 중단
+                if direction == 1:
+                    logging.info("[AUTO_FOCUS] 방향 전환 (+Z -> -Z)")
+                    direction = -1 # 반대 방향 시도
+                    # 다시 원점으로 (약간의 백트래킹)
+                    current_z_offset = 0.0 
+                    move_robot(start_pos['x'], start_pos['y'], start_pos['z'], 20)
+                    time.sleep(0.5)
+                else:
+                    logging.info("[AUTO_FOCUS] 양방향 탐색 완료. 최적 위치로 복귀.")
+                    # 최적 위치 복귀
+                    final_z = start_pos['z'] + current_z_offset
+                    move_robot(start_pos['x'], start_pos['y'], final_z, 20)
+                    return True
+                    
+        return True
+
+    def _execute_vlm_check(self) -> str:
+        """
+        [VLM_CHECK] LogicBrain에 VLM 분석 요청 및 Confidence 확인
+        Returns: "CONFIDENT", "UNCERTAIN", "FAIL"
+        """
+        logging.info("[VLM_CHECK] VLM 분석 요청 중...")
+        broadcaster.publish("agent_thought", "[Intelligent Eye] 이 위치에서 자세히 보고 있습니다...")
+        
+        # TODO: LogicBrain과의 비동기 연동 포인트. 
+        # 실제 구현에서는 'REQUEST_VLM' 이벤트를 날리고, SystemState에 결과가 업데이트되길 기다려야 함.
+        # 이번 단계에서는 개념 증명을 위해 'Focus Score'를 대리 지표(Proxy Metric)로 사용합니다.
+        
+        time.sleep(1.0) # VLM 처리 대기 시뮬레이션
+        
+        current_score = system_state.focus_score
+        logging.info(f"[VLM_CHECK] 현재 Focus Score: {current_score}")
+        
+        # Mock Logic: 점수가 50 이상이면 확신으로 간주 (테스트용 Threshold)
+        if current_score > 50.0:
+            return "CONFIDENT"
+        else:
+             return "UNCERTAIN"
+
+    def _execute_active_scanning(self, get_ee_position, move_robot) -> bool:
+        """
+        [SCANNING] 그리퍼 회전 및 미세 이동으로 새로운 관측점 확보
+        """
+        logging.info("[SCANNING] 능동 탐색: 그리퍼 회전/이동 시도")
+        broadcaster.publish("agent_thought", "[Active Perception] 잘 안보여서 각도를 바꿔보는 중입니다...")
+        
+        # 현재 회전 상태 관리 (단순화를 위해 toggle 방식)
+        if not hasattr(self, '_scan_step'):
+            self._scan_step = 0
+            
+        self._scan_step = (self._scan_step + 1) % 4
+        
+        # 현재 위치 획득
+        current_pos = get_ee_position()
+        
+        # 4방향 미세 이동 (십자 패턴) + Z축 약간 상승(시야 확보)
+        # 0: +X, 1: -X, 2: +Y, 3: -Y
+        offset_amount = 2.0 # 2cm 이동
+        target_x = current_pos['x']
+        target_y = current_pos['y']
+        
+        if self._scan_step == 0: target_x += offset_amount
+        elif self._scan_step == 1: target_x -= offset_amount
+        elif self._scan_step == 2: target_y += offset_amount
+        elif self._scan_step == 3: target_y -= offset_amount
+        
+        logging.info(f"[SCANNING] 시점 변경 -> ({target_x:.1f}, {target_y:.1f})")
+        
+        move_robot(target_x, target_y, current_pos['z'], 20)
+        time.sleep(1.0)
+        return True
 
 # 싱글톤 인스턴스
 visual_servoing = VisualServoing()

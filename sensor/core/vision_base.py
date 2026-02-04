@@ -79,3 +79,26 @@ class VisionBase(ABC):
         반드시 환경에 맞는 영상 및 깊이 획득 로직으로 구현해야 합니다.
         """
         pass
+
+    def measure_focus_score(self, image) -> float:
+        """
+        [특징 5] 이미지 선명도(Focus Score) 측정
+        
+        Laplacian Variance 알고리즘을 사용하여 이미지의 에지가 얼마나 뚜렷한지 수치화합니다.
+        점수가 높을수록 이미지가 선명하고(초점이 잘 맞음), 낮을수록 흐릿합니다(Blurry).
+        
+        Args:
+            image: OpenCV 포맷의 이미지 (BGR)
+        Returns:
+            float: 선명도 점수 (Variance of Laplacian)
+        """
+        try:
+            import cv2
+            if image is None: return 0.0
+            
+            # 흑백 변환 후 라플라시안 필터 적용
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            score = cv2.Laplacian(gray, cv2.CV_64F).var()
+            return float(score)
+        except Exception:
+            return 0.0

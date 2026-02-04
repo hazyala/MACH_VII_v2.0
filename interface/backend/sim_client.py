@@ -21,6 +21,7 @@ class PyBulletClient:
         self.connected = False
         self.latest_state = {}
         self.lock = threading.Lock()
+        self.connect_lock = threading.Lock()
         
         # Callbacks
         self.sio.on('connect', self.on_connect)
@@ -34,21 +35,28 @@ class PyBulletClient:
 
 
 
-    def connect(self, timeout=2):
+    def connect(self, timeout=10):
         if self.connected: return
-        try:
-            logging.info(f"[PyBullet] Connecting to {self.server_url} (timeout={timeout}s)...")
-            # wait=True와 wait_timeout을 사용하여 연결 시도를 제어
-            self.sio.connect(self.server_url, wait_timeout=timeout)
-            self.connected = True
-        except Exception as e:
-            if "Client is not in a disconnected state" in str(e):
-                logging.info("[PyBullet] 이미 연결된 상태입니다. (Flag 보정)")
+        
+        with self.connect_lock:
+            if self.connected: return
+            try:
+                logging.info(f"[PyBullet] Connecting to {self.server_url} (timeout={timeout}s)...")
+                # [Fix] websocket 우선 시도 및 타임아웃 단축 (빠른 Fallback)
+                self.sio.connect(
+                    self.server_url, 
+                    transports=['websocket', 'polling'], 
+                    wait_timeout=3
+                )
                 self.connected = True
-            else:
-                logging.error(f"[PyBullet] Connection failed: {e}")
-                logging.warning("[PyBullet] 시뮬레이션 서버가 실행 중인지 확인하세요. (기본값: http://localhost:5000)")
-                self.connected = False
+            except Exception as e:
+                if "Client is not in a disconnected state" in str(e):
+                    logging.info("[PyBullet] 이미 연결된 상태입니다. (Flag 보정)")
+                    self.connected = True
+                else:
+                    logging.error(f"[PyBullet] Connection failed: {e}")
+                    logging.warning("[PyBullet] 시뮬레이션 서버가 실행 중인지 확인하세요. (기본값: http://localhost:5000)")
+                    self.connected = False
 
     def on_connect(self):
         logging.info("[PyBullet] 시뮬레이션 서버에 연결되었습니다.")
@@ -93,16 +101,19 @@ class PyBulletClient:
         self.sio.emit('set_object', {'op': op, 'object': obj_type, 'fix': fix})
 
     # 비디오 프록시 (MJPEG)
-    def get_video_stream(self):
-        """ PyBullet 비디오 스트림을 위한 제너레이터 (프록시) """
+    def get_video_stream(self, source='main'):
+        """ 
+        PyBullet 비디오 스트림을 위한 제너레이터 (프록시)
+        source: 'main' (기본 카메라) or 'gripper' (엔드 이펙터 카메라)
+        """
         try:
+            endpoint = "/" if source == 'main' else "/ee-video"
             # PyBullet MJPEG 스트림에 연결하여 청크 단위로 반환
-            resp = requests.get(f"{self.server_url}/", stream=True, timeout=5)
+            resp = requests.get(f"{self.server_url}{endpoint}", stream=True, timeout=5)
             for chunk in resp.iter_content(chunk_size=1024):
                 yield chunk
         except Exception as e:
-            logging.error(f"[PyBullet] Video Proxy Error: {e}")
-            # Yield error frame or stop
+            logging.error(f"[PyBullet] Video Proxy Error ({source}): {e}")
             return
 
     def get_synced_packet(self):
@@ -156,13 +167,54 @@ class PyBulletClient:
                 "captured_pose": robot_state.get('ee', {})  # 엔드이펙터 위치
             }
             
-            logging.debug(f"[PyBulletClient] 패킷 생성됨 - color: {color_frame.shape}, depth: {depth_frame.shape}")
+            # logging.debug(f"[PyBulletClient] 패킷 생성됨 - color: {color_frame.shape}, depth: {depth_frame.shape}")
             return packet
             
         except Exception as e:
             logging.error(f"[PyBulletClient] get_synced_packet 오류: {e}")
             import traceback
             logging.error(traceback.format_exc())
+            return None
+
+    def get_ee_synced_packet(self, include_depth=True):
+        """
+        [Layer 1] 그리퍼 카메라(엔드 이펙터) 시점의 동기화된 패킷을 가져옵니다.
+        엔드포인트: /ee-image, /ee-depth
+        """
+        if not self.connected:
+            return None
+            
+        try:
+            import numpy as np
+            import cv2
+            
+            # 1. EE 이미지 (/ee-image)
+            img_resp = requests.get(f"{self.server_url}/ee-image", timeout=3.0)
+            if img_resp.status_code != 200: return None
+            
+            img_array = np.frombuffer(img_resp.content, dtype=np.uint8)
+            color_frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            
+            # 2. EE 깊이 (/ee-depth)
+            depth_frame = None
+            if include_depth:
+                depth_resp = requests.get(f"{self.server_url}/ee-depth", timeout=5.0)
+                if depth_resp.status_code == 200:
+                    depth_list = depth_resp.json()
+                    depth_frame = np.array(depth_list, dtype=np.float32)
+            
+            with self.lock:
+                robot_state = self.latest_state.get('robot', {})
+
+            packet = {
+                "color": color_frame,
+                "depth": depth_frame,
+                "captured_pose": robot_state.get('ee', {})
+            }
+            return packet
+            
+        except Exception as e:
+            logging.error(f"[PyBulletClient] get_ee_synced_packet 오류: {e}")
             return None
 
     def get_rgb_frame(self):

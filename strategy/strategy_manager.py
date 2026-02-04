@@ -9,7 +9,7 @@ class StrategyManager:
     성향, 위험 수위, 탐험 허용 여부 등 에이전트의 행동 방침을 결정합니다.
     """
     _instance = None
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     def __new__(cls):
         if cls._instance is None:

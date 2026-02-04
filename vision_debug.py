@@ -32,12 +32,21 @@ class VisionDebuggerClient:
         try:
             data = json.loads(message)
             
-            # 1. 프레임 디코딩
+            # 1. 프레임 디코딩 (Main)
             b64_frame = data.get("last_frame")
             if b64_frame:
                 img_data = base64.b64decode(b64_frame)
                 np_arr = np.frombuffer(img_data, np.uint8)
                 self.latest_frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                
+            # 1-2. 프레임 디코딩 (Gripper)
+            b64_ee = data.get("last_ee_frame")
+            if b64_ee:
+                img_data_ee = base64.b64decode(b64_ee)
+                np_arr_ee = np.frombuffer(img_data_ee, np.uint8)
+                self.latest_ee_frame = cv2.imdecode(np_arr_ee, cv2.IMREAD_COLOR)
+            else:
+                self.latest_ee_frame = None
             
             # 2. 인식 데이터 갱신
             self.latest_perception = data.get("perception", {})
@@ -63,45 +72,53 @@ class VisionDebuggerClient:
                                          on_close=self.on_close)
         self.ws.run_forever()
 
-    def draw_overlays(self, frame, perception):
+    def draw_overlays(self, frame_main, frame_ee, perception):
         """탐지 정보를 프레임 위에 그립니다."""
-        display_frame = frame.copy()
-        h, w = frame.shape[:2]
+        
+        # Main Frame 오버레이
+        display_main = frame_main.copy() if frame_main is not None else np.zeros((480, 640, 3), np.uint8)
+        h, w = display_main.shape[:2]
+        
+        # EE Frame 리사이즈 및 오버레이
+        if frame_ee is not None:
+             display_ee = frame_ee.copy()
+             # Main Frame과 높이를 맞춤
+             if display_ee.shape[0] != h:
+                 scale = h / display_ee.shape[0]
+                 new_w = int(display_ee.shape[1] * scale)
+                 display_ee = cv2.resize(display_ee, (new_w, h))
+        else:
+             display_ee = np.zeros((h, int(w*0.8), 3), np.uint8)
+             cv2.putText(display_ee, "No Gripper Feed", (50, h//2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 1)
+
+        # 병합
+        combined = np.hstack((display_main, display_ee))
         
         detections = perception.get("detected_objects", [])
         
         info_y = 30
         for i, det in enumerate(detections):
-            # 좌표는 VisionBridge에서 이미 보정되어 옴 (Refined)
             name = det.get("name", "Unknown")
             pos = det.get("position", {"x": 0, "y": 0, "z": 0})
-            bbox = det.get("bbox", [0, 0, 0, 0])
-            
-            # BBox 그리기 (만약 BBox 정보가 있다면)
-            # 주의: VisionBridge가 BBox를 보내주는지 확인 (Step 27 확인 결과 보냄)
-            # Step 27: "bbox": det.get("bbox", (0, 0)) <- (w, h)인지 (x, y, w, h)인지 확인 필요
-            # YoloDetector(Step 27) detect return: "pixel_center": (u, v), "bbox": (w, h) 형식임
-            # 하지만 정확한 픽셀 위치 재구성을 위해선 center가 필요.
-            # 하지만 여기서는 'refined' result만 오므로, 2D 박스를 정확히 그리기 어려울 수 있음.
-            # packet에 'pixel_center'나 'bbox' center가 없다면 그리기 어려움.
-            
-            # VisionBridge는 'detection' dict에 "pixel_center"를 포함하지 않고 있었음 (Step 27).
-            # 단, 좌표 텍스트 표시는 가능함.
             
             text = f"{name}: ({pos['x']:.1f}, {pos['y']:.1f}, {pos['z']:.1f}) cm"
-            cv2.putText(display_frame, text, (10, info_y), 
+            cv2.putText(combined, text, (10, info_y), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             info_y += 25
             
         # FPS 표시
-        cv2.putText(display_frame, f"Stream FPS: {self.fps:.1f}", (w - 180, 30),
+        cv2.putText(combined, f"Stream FPS: {self.fps:.1f}", (combined.shape[1] - 180, 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
         
         status = f"Objects: {len(detections)} | Mode: {perception.get('sensor_mode', 'Unknown')}"
-        cv2.putText(display_frame, status, (10, h - 20),
+        cv2.putText(combined, status, (10, h - 20),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        return display_frame
+        # View Label
+        cv2.putText(combined, "Main View", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        cv2.putText(combined, "Gripper View", (w + 10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        
+        return combined
 
     def run(self):
         # 1. WebSocket 스레드 시작
@@ -118,19 +135,19 @@ class VisionDebuggerClient:
 
         try:
             while self.running:
+                # 2. 시각화 (Main or Empty)
+                display_frame = self.draw_overlays(self.latest_frame, getattr(self, 'latest_ee_frame', None), self.latest_perception)
+                
+                # 3. FPS 계산
+                frame_count += 1
+                elapsed = time.time() - start_time
+                if elapsed > 1.0:
+                    self.fps = frame_count / elapsed
+                    frame_count = 0
+                    start_time = time.time()
+                
                 if self.latest_frame is not None:
-                    # 2. 시각화
-                    display_frame = self.draw_overlays(self.latest_frame, self.latest_perception)
-                    
-                    # 3. FPS 계산
-                    frame_count += 1
-                    elapsed = time.time() - start_time
-                    if elapsed > 1.0:
-                        self.fps = frame_count / elapsed
-                        frame_count = 0
-                        start_time = time.time()
-                    
-                    cv2.imshow("Review Vision Debug", display_frame)
+                    cv2.imshow("Review Vision Debug (Main | Gripper)", display_frame)
                     
                     # 4. 프레임 소모 (중복 렌더링 방지용 - 선택적)
                     # self.latest_frame = None 

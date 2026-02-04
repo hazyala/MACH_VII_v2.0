@@ -28,6 +28,11 @@ def _get_camera_parameters():
     PyBullet API를 통해 View/Projection Matrix(뷰/프로젝션 행렬: 3D 공간을 2D 화면으로 투영하기 위한 수학적 변환표)를 계산하고
     Intrinsic(내인자: 렌즈 속성) 및 Extrinsic(외인자: 카메라 위치/각도) 행렬을 추출합니다.
     """
+    # PyBullet이 없는 경우 더미 데이터 반환 (테스트 및 비-시뮬레이션 환경 지원)
+    if not PYBULLET_AVAILABLE:
+        logging.warning("[PyBulletProjection] PyBullet 미설치로 인해 더미 카메라 파라미터를 사용합니다.")
+        return 600.0, 600.0, 300.0, 240.0, np.eye(4)
+
     width = CAMERA_CONFIG["width"]
     height = CAMERA_CONFIG["height"]
     
@@ -122,8 +127,22 @@ def pixel_to_3d(pixel_x: int, pixel_y: int, depth_m: float) -> tuple:
         f"월드=({x_cm:.2f}, {y_cm:.2f}, {z_cm:.2f})cm"
     )
     
-    
     return x_cm, y_cm, z_cm
+
+def pixel_to_view_space(pixel_x: int, pixel_y: int, depth_m: float) -> tuple:
+    """
+    [Helper] 픽셀 좌표를 카메라 기준 3D 좌표(View Space, cm 단위)로 변환합니다.
+    월드 변환 전 단계의 순수 로컬 좌표가 필요할 때 사용합니다 (예: 그리퍼 카메라).
+    """
+    if not PYBULLET_AVAILABLE: return 0.0, 0.0, 0.0
+
+    # Pinhole Back-projection
+    x_view = (pixel_x - CX) * depth_m / FX
+    y_view = -(pixel_y - CY) * depth_m / FY
+    z_view = -depth_m # PyBullet View Space는 -Z 방향
+    
+    # m -> cm
+    return x_view * 100.0, y_view * 100.0, z_view * 100.0
 
 
 def calculate_planar_depth(world_x_cm, world_y_cm, world_z_cm):
@@ -143,3 +162,42 @@ def calculate_planar_depth(world_x_cm, world_y_cm, world_z_cm):
     # 3. View Space에서 카메라는 -Z 방향을 바라봅니다.
     # 따라서 Planar Depth는 -z_view 입니다.
     return -view_pos[2]
+
+def project_gripper_camera_to_world(point_view: list, ee_pos: list, ee_orn: list) -> list:
+    """
+    [Dynamic Kinematics] 그리퍼 카메라 뷰 좌표(View Space)를 월드 좌표(World Space)로 정확히 변환합니다.
+    
+    분석 결과 (pybullet_sim.py):
+    1. 카메라는 End-Effector `link_state[0]` (원점)에 위치함 -> 오프셋 0.
+    2. Camera Basis in EE Local Frame:
+       - X_cam (Right) = -Y_ee
+       - Y_cam (Up)    = -X_ee
+       - Z_cam (Back)  = -Z_ee
+       따라서 P_local = (-y_view, -x_view, -z_view)
+       
+    Args:
+        point_view: [x, y, z] (cm) in Camera View Space
+        ee_pos: [x, y, z] (m) World Position of EE
+        ee_orn: [x, y, z, w] Quaternion of EE
+        
+    Returns:
+        [x, y, z] (cm) World Coordinates
+    """
+    if not PYBULLET_AVAILABLE: return point_view
+    
+    # 1. View Space -> EE Local Space 변환
+    # Basis Change: (x, y, z) -> (-y, -x, -z)
+    p_local = np.array([-point_view[1], -point_view[0], -point_view[2]]) # cm 단위
+    
+    # 2. Rotate Local -> World
+    # Quaternion -> Rotation Matrix
+    rot_matrix = np.array(p.getMatrixFromQuaternion(ee_orn)).reshape(3, 3)
+    
+    # 3. Apply Rotation & Translation
+    # P_world = R * P_local + T
+    # T는 cm 단위로 변환 필요 (ee_pos는 m)
+    t_world = np.array(ee_pos) * 100.0
+    
+    p_world = rot_matrix @ p_local + t_world
+    
+    return p_world.tolist()

@@ -2,10 +2,12 @@ import time
 import threading
 import uuid
 import asyncio
+import re
 from typing import Dict, Any
 
 from shared.config import GlobalConfig
 from shared.state_broadcaster import broadcaster
+from expression.emotion_controller import emotion_controller
 from .tools import ALL_TOOLS
 from .prompts import SYSTEM_INSTRUCTION
 from memory.falkordb_manager import memory_manager
@@ -34,6 +36,7 @@ class AgentBroadcasterCallback(BaseCallbackHandler):
     """
     def __init__(self, logic_brain_instance):
         self.brain = logic_brain_instance
+        self.tool_used = False # [Double Action Prevention]
 
     def _check_stop(self):
         if self.brain.stop_token.is_set():
@@ -41,15 +44,43 @@ class AgentBroadcasterCallback(BaseCallbackHandler):
 
     def on_chain_start(self, serialized, inputs, **kwargs):
         self._check_stop()
+        self.tool_used = False # 체인 시작 시 초기화
         broadcaster.publish("agent_thought", ">>>> 생각 시작...")
+
+    def _parse_and_trigger_emotion(self, text: str) -> str:
+        """
+        텍스트에서 <<EMOTION:preset>> 태그를 찾아 감정 이벤트를 발생시키고,
+        태그가 제거된 텍스트를 반환합니다.
+        """
+        pattern = r"<<EMOTION:(\w+)>>"
+        
+        matches = re.finditer(pattern, text)
+        for match in matches:
+            preset_id = match.group(1).lower()
+            # [Emotion Pulse] 즉시 전파 (비동기)
+            emotion_controller.broadcast_emotion_event(preset_id, weight=1.0, duration=5.0)
+            
+        # 태그 제거
+        cleaned_text = re.sub(pattern, "", text)
+        return cleaned_text
 
     def on_text(self, text, **kwargs):
         self._check_stop()
-        pass # 사고 과정의 너무 잡다한 텍스트(단순 토큰 나열)는 로그 오염을 방지하기 위해 제외합니다.
+        # [Universal Tag Parsing] '생각(Thought)' 중에도 감정 태그가 있으면 즉시 반영
+        # 하지만 on_text는 파편화된 토큰일 수 있으므로 주의가 필요함.
+        # LangChain의 on_text는 보통 "Thought: " 같은 prefix나 tool output 등을 줍니다.
+        # 여기서는 전체 문맥을 잡기 어려우므로, 간단한 태그만 파싱합니다.
+        self._parse_and_trigger_emotion(text)
+        pass 
+
 
     def on_agent_action(self, action, **kwargs):
         self._check_stop()
         broadcaster.publish("agent_thought", f"[도구 사용] {action.tool}: {action.tool_input}")
+        
+        # [Double Action Prevention]
+        if action.tool in ["robot_action", "grasp_object", "vision_analyze"]:
+            self.tool_used = True
 
     def on_tool_end(self, output, **kwargs):
         self._check_stop()
@@ -61,14 +92,24 @@ class AgentBroadcasterCallback(BaseCallbackHandler):
         # 이 시점부터 에이전트의 사고가 물리적 행동 계획으로 구체화됩니다.
         intent_raw = finish.return_values.get("output", "IDLE")
         
-        # 문자열을 표준 ActionIntent Enum으로 변환 (파이프라인 내부 로직과 중복되더라도 명시적 로깅을 위해 수행)
-        intent_enum = ActionIntent.from_str(intent_raw)
-        pipeline.process_brain_intent(intent_enum)
+        # [Universal Tag Parsing] 최종 답변(Final Answer)에서 감정 태그 파싱 및 실행
+        # 로직: 태그는 감정 표현으로 승화시키고, 사용자에게 보이는 텍스트에서는 지운다.
+        cleaned_intent_raw = self._parse_and_trigger_emotion(intent_raw)
+
+        # [Double Action Prevention] 이미 도구로 로봇을 제어했다면, 답변에서 의도를 또 추출하지 않음.
+        if self.tool_used:
+             broadcaster.publish("agent_thought", "[System] 도구 사용 감지로 인해 implicit intent 생략됨.")
+             intent_enum = ActionIntent.IDLE
+        else:
+             intent_enum = ActionIntent.from_str(cleaned_intent_raw)
+             pipeline.process_brain_intent(intent_enum)
         
-        # 2. 사용자 인터페이스(UI)에 최종 결정 통보
-        # 사용자가 화면에서 AI의 판단 결과를 즉시 확인할 수 있도록 방송합니다.
-        broadcaster.publish("agent_thought", f"[최종 판단] {intent_enum.name} ({intent_raw[:30]}...)")
+        # 2. 사용자 통보 (태그가 제거된 깔끔한 텍스트)
+        broadcaster.publish("agent_thought", f"[최종 판단] {intent_enum.name} ({cleaned_intent_raw[:30]}...)")
         broadcaster.publish("agent_thought", "<<<< 생각 종료.")
+        
+        # 원본 output 수정 (LogicBrain의 execute_task에서 사용될 값)
+        finish.return_values["output"] = cleaned_intent_raw
 
 from strategy.strategy_manager import strategy_manager
 
@@ -85,7 +126,7 @@ class LogicBrain:
             self.llm = ChatOllama(
                 model=GlobalConfig.VLM_MODEL, 
                 base_url=GlobalConfig.VLM_ENDPOINT.replace("/api/generate", ""), # base_url은 /api/generate 제외
-                temperature=0.0
+                temperature=0.1
             )
             # 간단한 호출로 연결 테스트
             # self.llm.invoke("test") # 실가동 시에는 생략 가능 (시간 단축)
@@ -110,23 +151,31 @@ class LogicBrain:
             output_key="output"
         )
         
-        # 3. 에이전트 초기화 (안정성을 위해 initialize_agent 사용)
-        from langchain.agents import initialize_agent, AgentType
-        
-        self.agent_executor = initialize_agent(
-            tools=ALL_TOOLS, 
-            llm=self.llm, 
-            agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION, 
-            verbose=True, 
-            handle_parsing_errors=True,
-            memory=self.memory,
-            max_iterations=15,
-            agent_kwargs={
-                # "prefix": SYSTEM_INSTRUCTION, # [Safety] 복구: 이전 안정성 확보를 위해 커스텀 프롬프트 비활성화
-                "memory_prompts": [MessagesPlaceholder(variable_name="chat_history")], # 대화 내역 주입
-                "input_variables": ["input", "agent_scratchpad", "chat_history"] # 랭체인 필수 입력 변수
-            }
-        )
+        if self.llm is None:
+            logging.error("[Brain] LLM이 유효하지 않아 AgentExecutor를 초기화할 수 없습니다.")
+            self.agent_executor = None
+        else:
+            try:
+                # 3. 에이전트 초기화 (안정성을 위해 initialize_agent 사용)
+                from langchain.agents import initialize_agent, AgentType
+                
+                self.agent_executor = initialize_agent(
+                    tools=ALL_TOOLS, 
+                    llm=self.llm, 
+                    agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION, 
+                    verbose=True, 
+                    handle_parsing_errors=True,
+                    memory=self.memory,
+                    max_iterations=15,
+                    agent_kwargs={
+                        # "prefix": SYSTEM_INSTRUCTION, # [Safety] 복구: 이전 안정성 확보를 위해 커스텀 프롬프트 비활성화
+                        "memory_prompts": [MessagesPlaceholder(variable_name="chat_history")], # 대화 내역 주입
+                        "input_variables": ["input", "agent_scratchpad", "chat_history"] # 랭체인 필수 입력 변수
+                    }
+                )
+            except Exception as e:
+                logging.error(f"[Brain] AgentExecutor 초기화 실패: {e}")
+                self.agent_executor = None
         
         broadcaster.log_chat("bot", "MACH-VII 두뇌(Brain)가 활성화되었습니다.")
 
