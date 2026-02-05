@@ -267,144 +267,156 @@ class VisualServoing:
         """
         연속 제어 피드백 루프
         
-        Phase 1 (APPROACH): XY 정렬 (Z는 물체 위 5cm 유지)
-        Phase 2 (DESCEND): Z축 하강 (XY 고정)
+        Phase 1 (APPROACH): XY 정렬 (Z는 물체 위 5cm 유지) - 메인 카메라 사용
+        Phase 2 (DESCEND): Z축 하강 (XY 고정) - 그리퍼 카메라 사용 (자동 전환)
         
         Returns:
             성공 여부
         """
+        from sensor.perception.perception_manager import perception_manager
+        
         phase = "APPROACH"
         timeout = 60.0  # 타임아웃 60초
         start_time = time.time()
         
-        logging.info("[VisualServo] 연속 제어 루프 시작 (20Hz)")
+        # [Hybrid Servoing] 시작은 메인 카메라로
+        perception_manager.bridge.switch_source('main')
+        logging.info("[VisualServo] 연속 제어 루프 시작 (Main Camera Mode)")
         
-        while not self.cancel_token.is_set():
-            loop_start = time.time()
-            
-            # 타임아웃 체크
-            if time.time() - start_time > timeout:
-                logging.warning(f"[VisualServo] 타임아웃 (30초 경과)")
-                return False
-            
-            # 1. 현재 상태 획득
-            current_ee = get_ee_position()
-            target_obj = self.find_target_object(target_label)
-            
-            if not target_obj:
-                # [개선] 무한 대기 방지
-                retry_tracker = getattr(self, '_loop_retry_start', None)
-                if retry_tracker is None:
-                    self._loop_retry_start = time.time()
-                    retry_tracker = time.time()
+        try:
+            while not self.cancel_token.is_set():
+                loop_start = time.time()
                 
-                elapsed_retry = time.time() - retry_tracker
-                if elapsed_retry > 2.0:  # 2초간 못 찾으면 실패
-                    logging.error("[VisualServo] 물체 소실 타임아웃 (2초)")
+                # 타임아웃 체크
+                if time.time() - start_time > timeout:
+                    logging.warning(f"[VisualServo] 타임아웃 (30초 경과)")
                     return False
                 
-                logging.warning(f"[VisualServo] 물체 소실, 재탐지 대기... ({elapsed_retry:.1f}s)")
-                time.sleep(0.1)
-                continue
-            else:
-                self._loop_retry_start = None  # 찾으면 리셋
-            
-            target_pos = target_obj['position']
-            
-            # 2. Phase별 목표 위치 설정
-            if phase == "APPROACH":
-                # Phase 1: XY 정렬 (물체 바로 위)
-                goal = {
-                    'x': target_pos['x'],
-                    'y': target_pos['y'],
-                    'z': target_pos['z'] + self.APPROACH_HEIGHT
-                }
+                # 1. 현재 상태 획득
+                current_ee = get_ee_position()
+                target_obj = self.find_target_object(target_label)
                 
-                # XY 오차 계산
-                xy_error = math.sqrt(
-                    (current_ee['x'] - goal['x'])**2 +
-                    (current_ee['y'] - goal['y'])**2
-                )
+                if not target_obj:
+                    # [개선] 무한 대기 방지
+                    retry_tracker = getattr(self, '_loop_retry_start', None)
+                    if retry_tracker is None:
+                        self._loop_retry_start = time.time()
+                        retry_tracker = time.time()
+                    
+                    elapsed_retry = time.time() - retry_tracker
+                    if elapsed_retry > 2.0:  # 2초간 못 찾으면 실패
+                        logging.error("[VisualServo] 물체 소실 타임아웃 (2초)")
+                        return False
+                    
+                    logging.warning(f"[VisualServo] 물체 소실, 재탐지 대기... ({elapsed_retry:.1f}s)")
+                    time.sleep(0.1)
+                    continue
+                else:
+                    self._loop_retry_start = None  # 찾으면 리셋
                 
-                # XY 정렬 완료 판정
-                if xy_error < self.XY_THRESHOLD:
-                    phase = "DESCEND"
-                    logging.info(f"[VisualServo] ✅ XY 정렬 완료 (오차: {xy_error:.2f}cm)")
-                    logging.info(f"[VisualServo] Phase 전환: APPROACH → DESCEND")
-            
-            elif phase == "DESCEND":
-                # Phase 2: Z축 하강 (XY 고정)
-                goal = {
-                    'x': target_pos['x'],
-                    'y': target_pos['y'],
-                    'z': target_pos['z'] + self.GRASP_DEPTH
-                }
+                target_pos = target_obj['position']
                 
-                # Z 오차 계산
-                z_error = abs(current_ee['z'] - goal['z'])
+                # 2. Phase별 목표 위치 설정 및 카메라 전환 로직
+                if phase == "APPROACH":
+                    # Phase 1: XY 정렬 (물체 바로 위) - 메인 카메라
+                    goal = {
+                        'x': target_pos['x'],
+                        'y': target_pos['y'],
+                        'z': target_pos['z'] + self.APPROACH_HEIGHT
+                    }
+                    
+                    # XY 오차 계산
+                    xy_error = math.sqrt(
+                        (current_ee['x'] - goal['x'])**2 +
+                        (current_ee['y'] - goal['y'])**2
+                    )
+                    
+                    # XY 정렬 완료 판정
+                    if xy_error < self.XY_THRESHOLD:
+                        logging.info(f"[VisualServo] ✅ XY 정렬 완료 (오차: {xy_error:.2f}cm)")
+                        
+                        # [Camera Handover] 메인 카메라 -> 그리퍼 카메라 전환
+                        logging.info("[VisualServo] 📷 Phase 전환: APPROACH(Main) → DESCEND(Gripper)")
+                        broadcaster.publish("agent_thought", "[Eyes] '손바닥 눈(Gripper Cam)'으로 시점을 전환합니다.")
+                        
+                        perception_manager.bridge.switch_source('gripper')
+                        phase = "DESCEND"
+                        
+                        # 전환 및 Frame 안정화 대기 (Perception Loop가 업데이트될 시간 확보)
+                        time.sleep(1.0) 
+                        continue # 다음 루프부터 그리퍼 좌표 사용
                 
-                # Z 도달 판정 (매우 엄격: 1.0cm 이내)
-                if z_error < self.Z_THRESHOLD:
-                    logging.info(f"[VisualServo] ✅ 목표 정밀 도달! (Z 오차: {z_error:.2f}cm)")
-                    # 추가 안정화: 0.3초 대기 후 그리퍼 단계로
-                    time.sleep(0.3)
-                    return True  # 성공
-                elif z_error > 3.0:
-                    logging.warning(f"[VisualServo] ⚠️ Z 오차 과다: {z_error:.2f}cm (계속 접근 중...)")
-            
-            # 3. 오차 계산
-            error_x = goal['x'] - current_ee['x']
-            error_y = goal['y'] - current_ee['y']
-            error_z = goal['z'] - current_ee['z']
-            
-            total_error = math.sqrt(error_x**2 + error_y**2 + error_z**2)
-            
-            # 4. 비례 제어 (P-Control)
-            cmd_x = current_ee['x'] + error_x * self.GAIN
-            cmd_y = current_ee['y'] + error_y * self.GAIN
-            cmd_z = current_ee['z'] + error_z * self.GAIN
-            
-            # 5. 속도 조절 (오차가 크면 빠르게, 작으면 느리게)
-            if total_error < 3.0:
-                speed = 15  # 정밀 모드
-            elif total_error < 10.0:
-                speed = 30  # 중간 속도
-            else:
-                speed = 60  # 빠른 접근
-            
-            # 6. 명령 전송 (중복 필터링 적용)
-            # 이전 명령과 거의 동일하면 전송 생략 (통신 부하 및 로그 스팸 방지)
-            should_send = True
-            if hasattr(self, '_last_sent_cmd'):
-                lx, ly, lz, ls = self._last_sent_cmd
-                dist = math.sqrt((cmd_x - lx)**2 + (cmd_y - ly)**2 + (cmd_z - lz)**2)
+                elif phase == "DESCEND":
+                    # Phase 2: Z축 하강 (XY 고정) - 그리퍼 카메라
+                    goal = {
+                        'x': target_pos['x'],
+                        'y': target_pos['y'],
+                        'z': target_pos['z'] + self.GRASP_DEPTH
+                    }
+                    
+                    # Z 오차 계산
+                    z_error = abs(current_ee['z'] - goal['z'])
+                    
+                    # Z 도달 판정 (매우 엄격: 1.0cm 이내)
+                    if z_error < self.Z_THRESHOLD:
+                        logging.info(f"[VisualServo] ✅ 목표 정밀 도달! (Z 오차: {z_error:.2f}cm)")
+                        time.sleep(0.3)
+                        return True  # 성공
+                    elif z_error > 3.0:
+                        logging.warning(f"[VisualServo] ⚠️ Z 오차 과다: {z_error:.2f}cm (계속 접근 중...)")
                 
-                # 위치 변화 0.1cm 미만이고 속도가 같으면 전송 스킵
-                if dist < 0.1 and speed == ls:
-                    should_send = False
+                # 3. 오차 계산
+                error_x = goal['x'] - current_ee['x']
+                error_y = goal['y'] - current_ee['y']
+                error_z = goal['z'] - current_ee['z']
+                
+                total_error = math.sqrt(error_x**2 + error_y**2 + error_z**2)
+                
+                # 4. 비례 제어 (P-Control)
+                cmd_x = current_ee['x'] + error_x * self.GAIN
+                cmd_y = current_ee['y'] + error_y * self.GAIN
+                cmd_z = current_ee['z'] + error_z * self.GAIN
+                
+                # 5. 속도 조절
+                if total_error < 3.0:
+                    speed = 15  # 정밀 모드
+                elif total_error < 10.0:
+                    speed = 30  # 중간 속도
+                else:
+                    speed = 60  # 빠른 접근
+                
+                # 6. 명령 전송
+                should_send = True
+                if hasattr(self, '_last_sent_cmd'):
+                    lx, ly, lz, ls = self._last_sent_cmd
+                    dist = math.sqrt((cmd_x - lx)**2 + (cmd_y - ly)**2 + (cmd_z - lz)**2)
+                    if dist < 0.1 and speed == ls:
+                        should_send = False
+                
+                if should_send:
+                    move_robot(cmd_x, cmd_y, cmd_z, speed)
+                    self._last_sent_cmd = (cmd_x, cmd_y, cmd_z, speed)
+                
+                # 7. 주기적 디버그 로그
+                elapsed = time.time() - start_time
+                if int(elapsed * 2) % 10 == 0 and elapsed > 0.5:
+                    logging.debug(f"[VisualServo({perception_manager.bridge.current_source_key})] "
+                                  f"P={phase}, Err={total_error:.1f}, "
+                                  f"Z_Err={abs(goal['z']-current_ee['z']):.1f}")
+                
+                # 8. 루프 주기 유지
+                elapsed_loop = time.time() - loop_start
+                sleep_time = (1.0 / self.LOOP_HZ) - elapsed_loop
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
             
-            if should_send:
-                move_robot(cmd_x, cmd_y, cmd_z, speed)
-                self._last_sent_cmd = (cmd_x, cmd_y, cmd_z, speed)
+            logging.warning("[VisualServo] 취소됨 (cancel_token)")
+            return False
             
-            # 7. 주기적 디버그 로그 (5초마다)
-            elapsed = time.time() - start_time
-            if int(elapsed * 2) % 10 == 0 and elapsed > 0.5:
-                logging.debug(
-                    f"[VisualServo] Phase={phase}, "
-                    f"오차={total_error:.1f}cm, "
-                    f"목표=({goal['x']:.1f}, {goal['y']:.1f}, {goal['z']:.1f}), "
-                    f"현재=({current_ee['x']:.1f}, {current_ee['y']:.1f}, {current_ee['z']:.1f})"
-                )
-            
-            # 8. 루프 주기 유지 (20Hz = 50ms)
-            elapsed_loop = time.time() - loop_start
-            sleep_time = (1.0 / self.LOOP_HZ) - elapsed_loop
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-        
-        logging.warning("[VisualServo] 취소됨 (cancel_token)")
-        return False
+        finally:
+            # [Cleanup] 반드시 메인 카메라로 복귀해야 함
+            logging.info("[VisualServo] 제어 루프 종료 - 메인 카메라 복귀")
+            perception_manager.bridge.switch_source('main')
     
     def _transition(self, next_state: ServoState):
         """상태 전이 및 로깅"""

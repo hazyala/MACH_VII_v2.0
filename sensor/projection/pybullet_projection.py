@@ -163,28 +163,86 @@ def calculate_planar_depth(world_x_cm, world_y_cm, world_z_cm):
     # 따라서 Planar Depth는 -z_view 입니다.
     return -view_pos[2]
 
+    
+    return -view_pos[2]
+
+# [Fix] Shared Memory Connection for Ground Truth Data
+# Server가 회전값(Orientation)을 보내주지 않으므로,
+# 로컬에서 물리 엔진 메모리에 직접 접근하여 로봇의 실제 회전값을 읽어옵니다.
+# 굳이 서버 반환 요청을 안하는 이유는, 리얼센스는 SDK에서 회전값 등 모든 정보를 가져올 수 있기 때문.
+_SHARED_UID = None
+_ROBOT_ID = None
+_EE_INDEX = None
+
+def _get_real_ee_state():
+    """
+    [Direct Memory Access]
+    PyBullet Shared Memory에 접속하여 실시간 True EE Pose(Pos, Orn)를 가져옵니다.
+    """
+    global _SHARED_UID, _ROBOT_ID, _EE_INDEX
+    
+    if not PYBULLET_AVAILABLE: return None, None
+    
+    try:
+        # 1. Connection Check & Init
+        if _SHARED_UID is None:
+            # 먼저 연결 시도 (기존 연결 확인)
+            if p.isConnected():
+                _SHARED_UID = p.getConnectionInfo()['connectionMethod']
+            else:
+                try:
+                    _SHARED_UID = p.connect(p.SHARED_MEMORY)
+                except:
+                    return None, None
+        
+        # 2. Robot ID Finding (First time)
+        if _ROBOT_ID is None and p.isConnected():
+            num_bodies = p.getNumBodies()
+            # 간단히 첫 번째 바디 또는 'dofbot' 검색
+            if num_bodies > 0:
+                _ROBOT_ID = 0 # DefaultAssumption
+                # EE Index Finding
+                num_joints = p.getNumJoints(_ROBOT_ID)
+                for i in range(num_joints):
+                     info = p.getJointInfo(_ROBOT_ID, i)
+                     if b'ee' in info[1] or b'tip' in info[1] or b'end_effector' in info[12]:
+                         _EE_INDEX = i
+                         break
+                if _EE_INDEX is None: _EE_INDEX = num_joints - 1
+                
+        # 3. Get State
+        if _ROBOT_ID is not None and _EE_INDEX is not None:
+             state = p.getLinkState(_ROBOT_ID, _EE_INDEX, computeForwardKinematics=True)
+             return state[4], state[5] # Pos(m), Orn(Quaternion)
+             
+    except Exception as e:
+        logging.error(f"[PyBulletProjection] Shared Memory Access Fail: {e}")
+        
+    return None, None
+
 def project_gripper_camera_to_world(point_view: list, ee_pos: list, ee_orn: list) -> list:
     """
     [Dynamic Kinematics] 그리퍼 카메라 뷰 좌표(View Space)를 월드 좌표(World Space)로 정확히 변환합니다.
-    
-    분석 결과 (pybullet_sim.py):
-    1. 카메라는 End-Effector `link_state[0]` (원점)에 위치함 -> 오프셋 0.
-    2. Camera Basis in EE Local Frame:
-       - X_cam (Right) = -Y_ee
-       - Y_cam (Up)    = -X_ee
-       - Z_cam (Back)  = -Z_ee
-       따라서 P_local = (-y_view, -x_view, -z_view)
-       
-    Args:
-        point_view: [x, y, z] (cm) in Camera View Space
-        ee_pos: [x, y, z] (m) World Position of EE
-        ee_orn: [x, y, z, w] Quaternion of EE
-        
-    Returns:
-        [x, y, z] (cm) World Coordinates
     """
     if not PYBULLET_AVAILABLE: return point_view
     
+    # [Bugfix] Server에서 Identity Orientation([0,0,0,1])만 보내는 경우
+    # Shared Memory에서 실제 Orientation을 조회하여 덮어씁니다.
+    # 단, 위치(ee_pos)는 싱크를 위해 Server 패킷값을 우선하되, Orn은 GT를 사용.
+    
+    use_gt = False
+    # Identity Check (Epsilon)
+    if abs(ee_orn[0]) < 1e-4 and abs(ee_orn[1]) < 1e-4 and abs(ee_orn[2]) < 1e-4 and abs(ee_orn[3]-1) < 1e-4:
+        use_gt = True
+    elif ee_orn == [0,0,0,0]: # Invalid
+        use_gt = True
+        
+    if use_gt:
+        real_pos, real_orn = _get_real_ee_state()
+        if real_orn is not None:
+            ee_orn = real_orn
+            # logging.debug(f"[PyBulletProjection] GT Orientation Patch: {ee_orn}")
+            
     # 1. View Space -> EE Local Space 변환
     # Basis Change: (x, y, z) -> (-y, -x, -z)
     p_local = np.array([-point_view[1], -point_view[0], -point_view[2]]) # cm 단위
