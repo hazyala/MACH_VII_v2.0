@@ -48,7 +48,7 @@ class VisualServoing:
         self.GAIN = 0.8             # 비례 제어 게인 (80%씩 보정) - 안정적 이동
         self.XY_THRESHOLD = 1.0     # XY 정렬 판정 (cm) - 정밀 제어
         self.Z_THRESHOLD = 0.5      # Z 도달 판정 (cm) - 정밀 제어
-        self.APPROACH_HEIGHT = 8.0  # 접근 높이 오프셋 (cm) - 여유 있게 진입
+        self.APPROACH_HEIGHT = 20.0  # 접근 높이 오프셋 (cm) - 시야 확보 위해 상향 조정 (8.0 -> 20.0)
         self.GRASP_DEPTH = 0.0      # 파지 깊이 오프셋 (cm) - Vision이 정확한 중심을 주므로 오프셋 0
     
     def stop(self):
@@ -93,8 +93,13 @@ class VisualServoing:
 
         with self.lock:
             if self.is_running:
-                logging.warning("[VisualServoing] 이미 실행 중")
-                return False
+                # [Fix] 좀비 프로세스 방지: 실제 로봇이 IDLE이면 락 해제
+                if system_state.robot.arm_status == "IDLE":
+                    logging.warning("[VisualServoing] ⚠️ 'is_running' 상태였으나 로봇이 IDLE입니다. 강제 재시작합니다.")
+                    self.is_running = False
+                else:
+                    logging.warning("[VisualServoing] 이미 실행 중이므로 요청을 무시합니다.")
+                    return False
             self.is_running = True
             self.cancel_token.clear()
             self.current_state = ServoState.IDLE
@@ -213,7 +218,6 @@ class VisualServoing:
                         
                     if not move_started:
                         logging.warning("[GRASP] 그리퍼가 움직이지 않습니다. (명령 유실 또는 고장)")
-                        # 그래도 진행은 해봄 (Sim lag일 수 있음)
 
                     # 2. 완료(Stability) 감지
                     last_gripper_val = system_state.robot.gripper_state
@@ -259,23 +263,16 @@ class VisualServoing:
                         logging.info("[GRASP] ✅ 물체 파지 확인 (Grasp Success)")
                         broadcaster.publish("agent_thought", f"[VisualServoing] 물체 파지 성공 (Width: {current_gripper:.3f})")
                         
-                        # [Emotion] 파지 성공! 성취감
-                        emotion_controller.broadcast_emotion_event("proud", weight=1.0, duration=5.0)
-                        
                         success = True
                     elif current_gripper >= 0.058:
                          logging.warning("[GRASP] ❌ 그리퍼가 닫히지 않았습니다 (Still Open)")
                          broadcaster.publish("agent_thought", "[VisualServoing] 파지 실패 (그리퍼 동작 안함)")
-                         emotion_controller.broadcast_emotion_event("confused", weight=0.8, duration=4.0)
                          success = False
                          self._transition(ServoState.FAIL)
                          break
                     else:
                         logging.warning("[GRASP] ❌ 빈손 감지 (Grasp Failed - Fully Closed)")
                         broadcaster.publish("agent_thought", "[VisualServoing] 파지 실패 (빈손)")
-                        
-                        # [Emotion] 실패... 슬픔
-                        emotion_controller.broadcast_emotion_event("sad", weight=0.8, duration=4.0)
                         
                         success = False
                         self._transition(ServoState.FAIL)
@@ -352,6 +349,9 @@ class VisualServoing:
                 target_obj = self.find_target_object(target_label)
                 
                 if not target_obj:
+                    # [Emotion] 물체 소실 시 'LOST' 상태 전파 (EmotionBrain -> Confused)
+                    system_state.robot.arm_status = "LOST"
+                    
                     # [개선] 무한 대기 방지
                     retry_tracker = getattr(self, '_loop_retry_start', None)
                     if retry_tracker is None:
@@ -361,6 +361,8 @@ class VisualServoing:
                     elapsed_retry = time.time() - retry_tracker
                     if elapsed_retry > 2.0:  # 2초간 못 찾으면 실패
                         logging.error("[VisualServo] 물체 소실 타임아웃 (2초)")
+                        # EmotionBrain이 FAIL을 처리하므로 여기선 이벤트 호출 제거 가능하나, 
+                        # 즉각 피드백을 위해 남겨둠 (중복 무관)
                         emotion_controller.broadcast_emotion_event("confused", weight=0.5, duration=2.0)
                         return False
                     
@@ -368,6 +370,10 @@ class VisualServoing:
                     time.sleep(0.1)
                     continue
                 else:
+                    # [Emotion] 물체 재발견 (상태 복구)
+                    if system_state.robot.arm_status == "LOST":
+                        system_state.robot.arm_status = "VISUAL_SERVO"
+                        
                     self._loop_retry_start = None  # 찾으면 리셋
                 
                 target_pos = target_obj['position']
@@ -475,9 +481,28 @@ class VisualServoing:
             perception_manager.bridge.switch_source('main')
     
     def _transition(self, next_state: ServoState):
-        """상태 전이 및 로깅"""
+        """상태 전이 및 로깅, SystemState 동기화"""
         logging.info(f"[VisualServoing] 상태 전환: {self.current_state.name} → {next_state.name}")
         self.current_state = next_state
+        
+        # [SystemState Sync] EmotionBrain이 볼 수 있도록 상태 전파
+        status_map = {
+            ServoState.IDLE: "IDLE",
+            ServoState.DETECT: "SEARCH",
+            ServoState.VISUAL_SERVO: "VISUAL_SERVO",
+            ServoState.AUTO_FOCUS: "VISUAL_SERVO",
+            ServoState.VLM_CHECK: "THINKING",
+            ServoState.SCANNING: "SEARCH",
+            ServoState.GRASP: "GRASP",
+            ServoState.SUCCESS: "SUCCESS",
+            ServoState.FAIL: "FAIL"
+        }
+        
+        if next_state in status_map:
+            system_state.robot.arm_status = status_map[next_state]
+            # 상태가 너무 빨리 지나가지 않도록 결과 상태에서는 잠시 홀딩 (Brain이 0.5초 주기이므로)
+            if next_state in [ServoState.SUCCESS, ServoState.FAIL]:
+                 time.sleep(0.6)
 
     def _execute_auto_focus(self, get_ee_position, move_robot) -> bool:
         """

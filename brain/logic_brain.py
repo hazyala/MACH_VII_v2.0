@@ -22,7 +22,7 @@ from langchain.callbacks.base import BaseCallbackHandler
 from shared.intents import ActionIntent
 from shared.pipeline import pipeline
 
-class UserStopException(Exception):
+class UserStopException(BaseException):
     pass
 
 class AgentBroadcasterCallback(BaseCallbackHandler):
@@ -52,13 +52,19 @@ class AgentBroadcasterCallback(BaseCallbackHandler):
         텍스트에서 <<EMOTION:preset>> 태그를 찾아 감정 이벤트를 발생시키고,
         태그가 제거된 텍스트를 반환합니다.
         """
+        from brain.emotion_brain import emotion_brain
+        
         pattern = r"<<EMOTION:(\w+)>>"
         
         matches = re.finditer(pattern, text)
         for match in matches:
             preset_id = match.group(1).lower()
-            # [Emotion Pulse] 즉시 전파 (비동기)
+            
+            # 1. [Emotion Pulse] 즉시 전파 (Frontend Animation)
             emotion_controller.broadcast_emotion_event(preset_id, weight=1.0, duration=5.0)
+            
+            # 2. [Emotion State] Brain에 오버라이드 등록 (Sustained Vector)
+            emotion_brain.set_emotional_override(preset_id, duration=5.0)
             
         # 태그 제거
         cleaned_text = re.sub(pattern, "", text)

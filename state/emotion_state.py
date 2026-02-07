@@ -4,14 +4,28 @@ from typing import Dict
 @dataclass
 class EmotionVector:
     """
-    로봇의 감정을 표현하는 연속적인 5차원 벡터입니다.
-    각 항목은 0.0 ~ 1.0 사이의 소수점 값을 가지며, 이 조합에 따라 복합적인 감정(기쁨, 화남 등)이 결정됩니다.
+    로봇의 감정 상태를 5차원 벡터로 표현합니다. (Modified PAD Model)
+    각 값은 0.0 ~ 1.0 사이의 강도를 가집니다.
     """
-    focus: float = 0.5       # 주의 집중도 (Idle -> Hyped)
-    effort: float = 0.0      # 신체적/정신적 부하
-    confidence: float = 0.5  # 자신감
-    frustration: float = 0.0 # 오류/실패 누적
-    curiosity: float = 0.5   # 탐험 욕구
+    # [Focus / Arousal] 주의 집중도 및 각성 수준
+    # 1.0: 초집중, 놀람 (High Arousal) | 0.0: 멍함, 지루함 (Low Arousal)
+    focus: float = 0.1
+    
+    # [Effort / Energy] 신체적/정신적 에너지 소모량
+    # 1.0: 고부하, 피곤, 힘씀 | 0.0: 편안함, 휴식
+    effort: float = 0.0
+    
+    # [Confidence / Dominance] 상황 통제력 및 성공 확신
+    # 1.0: 위풍당당, 환희, 확신 | 0.0: 위축, 공포, 부끄러움
+    confidence: float = 0.1
+    
+    # [Frustration / Distress] 기대와 결과의 불일치, 장애물
+    # 1.0: 격분, 짜증, 좌절 | 0.0: 만족, 흐름이 좋음
+    frustration: float = 0.0
+    
+    # [Curiosity / Interest] 새로운 자극에 대한 탐구욕
+    # 1.0: 흥미진진, 장난기 | 0.0: 무관심
+    curiosity: float = 0.1
 
     def update(self, delta: Dict[str, float]):
         """델타 업데이트를 안전하게 적용합니다."""

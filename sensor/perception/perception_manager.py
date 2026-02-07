@@ -97,8 +97,19 @@ class PerceptionManager:
                     system_state.robot.gripper_state = robot_info.get('gripper', 0.0)
                     
                     # 물리 엔진 상태(arm_status) 모니터링: "STUCK", "MOVING", "IDLE"
+                    # 물리 엔진 상태(arm_status) 모니터링: "STUCK", "MOVING", "IDLE"
                     current_status = robot_info.get('status', 'IDLE')
-                    system_state.robot.arm_status = current_status
+                    
+                    # [Fix] VisualServoing 등 상위 전략이 제어 중일 때는 드라이버 상태(IDLE)로 덮어쓰지 않음
+                    # 상위 상태: VISUAL_SERVO, GRASP, SEARCH, SUCCESS, FAIL
+                    existing_status = system_state.robot.arm_status
+                    if existing_status in ["VISUAL_SERVO", "GRASP", "SEARCH", "SUCCESS", "FAIL"]:
+                         # 상위 전략 실행 중이면, 하위 물리 상태(IDLE/MOVING)는 무시하되 
+                         # STUCK(비상)은 반영해야 함
+                         if current_status == "STUCK":
+                             system_state.robot.arm_status = "STUCK"
+                    else:
+                         system_state.robot.arm_status = current_status
                     
                     # Safety Loop: "STUCK" 상태 감지 시 즉시 안전 플래그 설정
                     if current_status == "STUCK":

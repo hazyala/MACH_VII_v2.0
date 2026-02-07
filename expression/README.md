@@ -16,19 +16,14 @@
 ## 📂 파일 구조 및 상세 설명 (Structure & Files)
 
 ### 1. `emotion_controller.py` (감정 연출가)
-- **역할**: 감정의 **'목표치'**를 설정하고, 현재 상태에서 목표까지 부드럽게 변화(Interpolation)시키는 로직입니다.
 - **주요 로직**:
-    1. **구독(Subscribe)**: `Braodcaster`를 통해 `Brain`이 '생각 중', '성공', '실패' 상태인지 듣습니다.
-    2. **목표 설정(Targeting)**:
-        - `PLANNING` (생각 중) -> `Focus` (집중) 수치를 높입니다.
-        - `SUCCESS` (성공) -> `Confidence` (자신감) 수치를 높이고 `Frustration` (좌절)을 낮춥니다.
+    1. **명령 수신(Receive)**: `Brain/EmotionBrain`으로부터 `set_target_preset(preset_id)` 명령을 받습니다. (예: "지금 행복한 표정 지어")
+    2. **목표 설정(Targeting)**: `CONFIDENCE`, `FOCUS` 등의 감정 벡터 목표치를 설정합니다.
+        - `HAPPY` -> Confidence 0.8, Focus 0.5...
     3. **보간(Interpolation)**: `step(dt)` 함수가 60Hz로 실행되며 수치를 서서히 변경합니다. (갑자기 표정이 팍 바뀌지 않게 함)
     4. **파라미터 계산(Mapping)**:
         - 최종적으로 프론트엔드에 보낼 `muscles` 데이터를 계산합니다.
         - 예: `smile = (confidence - frustration)` (자신감이 높으면 웃고, 좌절하면 찡그림)
-
-> **[누락된 파일]**: `renderer.py` (이전 문서에는 언급되었으나 실제로는 존재하지 않습니다.)
-
 ---
 
 ## ⚙️ 작동 원리 (Process Flow)

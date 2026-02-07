@@ -9,7 +9,7 @@ from shared.pipeline import pipeline
 from shared.state_broadcaster import broadcaster
 from brain.logic_brain import logic_brain
 from expression.emotion_controller import emotion_controller
-from brain.emotion_updater import llm_updater
+from brain.emotion_brain import emotion_brain # [New] Central Brain
 from sensor.core import realsense_driver
 from sensor.perception import perception_manager
 from interface.backend.sim_client import pybullet_client
@@ -32,7 +32,7 @@ async def startup_event():
     # 1. 하위 계층 드라이버 및 루프 시작
     perception_manager.start()
     emotion_controller.start()
-    llm_updater.start()
+    emotion_brain.start() # [New] 감정 브레인 가동
     
     from embodiment.robot_controller import robot_controller
     robot_controller.start()
@@ -54,7 +54,7 @@ async def startup_event():
 async def shutdown_event():
     perception_manager.stop()
     emotion_controller.stop()
-    llm_updater.stop()
+    emotion_brain.stop()
     from embodiment.robot_controller import robot_controller
     robot_controller.stop()
 
@@ -94,7 +94,7 @@ async def handle_request(dto: UserRequestDTO, background_tasks: BackgroundTasks)
         if dto.command:
             # [Fast Path] 긴급 정지 키워드 감지 시 에이전트 우회하여 즉시 정지
             cmd_lower = dto.command.lower()
-            stop_keywords = ["멈춰", "정지", "stop", "관둬", "취소", "중단"]
+            stop_keywords = ["멈춰", "정지", "stop", "관둬", "취소", "중단", "그만"]
             if any(k in cmd_lower for k in stop_keywords):
                 from embodiment.robot_controller import robot_controller
                 from strategy.visual_servoing import visual_servoing

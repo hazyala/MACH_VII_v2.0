@@ -108,6 +108,7 @@
 ### 9️⃣ System Stability & Concurrency
 *   **RLock Hardening**: 모든 커널 싱글톤 및 컨트롤러에 `threading.RLock`을 적용하여 동일 스레드 내 재귀 호출로 인한 데드락을 원천 차단했습니다.
 *   **Async-Safe Broadcasting**: 고속 통신 루프 내에서 브로드캐스트 호출을 락 구간 외부로 분리하여 시스템 응답성을 극대화했습니다.
+*   **Physical Hard Stop**: 긴급 정지 시 논리적 중단뿐만 아니라, 물리 엔진에 현재 위치 유지(Hold) 명령을 전송하여 관성에 의한 사고를 방지합니다.
 *   **Optimized Startup**: PyBullet 커넥션 타임아웃 최적화(3s)를 통해 시뮬레이션 환경 유무와 관계없이 빠른 시스템 부팅을 보장합니다.
 
 ---

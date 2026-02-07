@@ -3,6 +3,9 @@ import time
 import asyncio
 import uuid
 from typing import Dict
+import os
+import re
+from shared.config import PathConfig
 from state.emotion_state import EmotionVector
 from shared.state_broadcaster import broadcaster
 
@@ -11,88 +14,144 @@ class EmotionController:
     현재 감정 벡터를 목표 벡터로 부드럽게 보간(Interpolate)하는 고속 컨트롤러입니다.
     StateBroadcaster를 구독하여 주요 상태 변화에 반응합니다.
     """
+    # [Configuration] 16종 프리셋에 대한 목표 벡터 정의
+    # 초기에는 비어있으며, frontend/expressions.js를 파싱하여 채웁니다.
+    PRESET_VECTORS = {}
+
     def __init__(self):
         self.current_vector = EmotionVector()
         self.target_vector = EmotionVector()
         self.running = False
         self._lock = threading.RLock()
         
+        # JS 파일로부터 프리셋 로드 (Single Source of Truth)
+        self._load_presets_from_js()
+        
         # 우선순위 제어를 위한 타임스탬프 (파이프라인 업데이트 보호용)
         self.manual_override_until = 0.0
         
         self.last_preset_id = "neutral"
+        self.current_preset_id = "neutral" # Brain이 결정한 현재 프리셋
         self.muscles = {}
-        
-        # State Tracking
-        self.current_brain_state = "IDLE"
-        self.state_enter_time = time.time()
         
         # Heartbeat 타이머
         self.last_heartbeat_time = 0.0
         
-        # 브레인 이벤트 구독
-        broadcaster.subscribe(self.on_brain_state_change)
+        # 브레인 이벤트 구독 (이제 EmotionBrain이 직접 set_target_preset을 호출)
+        # broadcaster.subscribe(self.on_brain_state_change) # Removed as per new architecture
+
+    def _load_presets_from_js(self):
+        """
+        [Dynamic Loader] frontend/src/constants/expressions.js 파일을 파싱하여
+        Emotion Vector 정의를 동적으로 가져옵니다.
+        """
+        
+        js_path = os.path.join(PathConfig.BASE_DIR, "interface", "frontend", "src", "constants", "expressions.js")
+        
+        try:
+            with open(js_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            # Regex to find id and vector block
+            # Matches: id: "happy", ... vector: { focus: 0.5, ... }
+            # Note: This regex assumes 'id' comes before 'vector' in the object definition
+            # or we iterate over objects.
+            
+            # Strategy: Split by "{" to iterate objects? No, too risky.
+            # Strategy: Regex for `id:\s*["'](\w+)["']` ... `vector:\s*\{([^}]+)\}`
+            # This assumes vector block is valid and doesn't contain nested braces (it doesn't).
+            
+            # Let's find all objects roughly.
+            # Or just search for the specific pattern sequence.
+            pattern = re.compile(r'id:\s*["\'](\w+)["\'][\s\S]*?vector:\s*\{([^}]+)\}')
+            
+            matches = pattern.findall(content)
+            
+            count = 0
+            for preset_id, vector_str in matches:
+                # vector_str example: "focus: 0.1, effort: 0.1, ..."
+                vector_data = {}
+                
+                # Parse key-value pairs
+                # key: value (comma or newline or space)
+                kv_pattern = re.compile(r'(\w+):\s*([0-9.]+)')
+                kv_matches = kv_pattern.findall(vector_str)
+                
+                for key, val in kv_matches:
+                    vector_data[key] = float(val)
+                
+                self.PRESET_VECTORS[preset_id.lower()] = vector_data
+                count += 1
+                
+            print(f"[EmotionController] Loaded {count} presets from expressions.js")
+            # print(f"Loaded keys: {list(self.PRESET_VECTORS.keys())}")
+            
+        except Exception as e:
+            print(f"[EmotionController] ❌ Failed to load expressions.js: {e}")
+            # Fallback (Empty, will warn on usage)
 
     def on_brain_state_change(self, state: Dict[str, any]):
-        """브레인 상태가 변경될 때 호출되는 콜백입니다."""
-        # 파이프라인에 의한 수동 조작이 활성화된 경우 상태 기반 자동 업데이트 무시
-        if time.time() < self.manual_override_until:
-            return
-
-        agent_state = state.get("agent_state", "IDLE")
-        
-        with self._lock:
-            # 상태 변경 시 초기화
-            if agent_state != self.current_brain_state:
-                self.current_brain_state = agent_state
-                self.state_enter_time = time.time()
-                print(f"[Emotion] Brain State Changed: {agent_state}")
-
-            if agent_state == "PLANNING": # THINKING
-                self.target_vector.focus = 0.8
-                self.target_vector.effort = 0.3
-                self.target_vector.curiosity = 0.7 
-            elif agent_state == "EXECUTING":
-                self.target_vector.focus = 1.0
-                self.target_vector.effort = 0.6
-                self.target_vector.confidence = 0.5
-            elif agent_state == "IDLE":
-                # [Refined] IDLE 초기에는 Neutral(평온) 유지
-                # Bored(지루함) 조건(focus < 0.2)에 걸리지 않도록 안전값 설정
-                self.target_vector.focus = 0.3
-                self.target_vector.effort = 0.1
-                self.target_vector.frustration = 0.0
-                self.target_vector.confidence = 0.5 
-                self.target_vector.curiosity = 0.3
-            elif agent_state == "RECOVERING": 
-                self.target_vector.focus = 0.5
-                self.target_vector.frustration = 0.9 
-                self.target_vector.confidence = 0.1
-                self.target_vector.effort = 0.8
-            elif agent_state == "SUCCESS":
-                self.target_vector.focus = 0.5
-                self.target_vector.frustration = 0.0
-                self.target_vector.confidence = 1.0 
-                self.target_vector.effort = 0.0
-                self.target_vector.curiosity = 0.5
+        """
+        [Architecture Change] 
+        이제 EmotionController는 독자적으로 판단하지 않습니다. 
+        BrainState 변화에 따른 감정 결정은 EmotionBrain이 전담합니다.
+        """
+        pass
 
     def update_target(self, new_target: Dict[str, float], duration: float = 3.0):
         """
-        [Restored] 파이프라인/Updater에서 감정 벡터 목표를 조정할 때 호출.
-        Vector System -> Pulse System으로의 다리 역할을 합니다.
+        [Legacy Support] 직접 벡터 제어가 필요한 특수 경우를 위해 유지
         """
+        # [Debug] 외부 타겟 업데이트 로그
+        # print(f"[Emotion DEBUG] update_target called: {new_target}")
+        
         with self._lock:
             self.manual_override_until = time.time() + duration
             for k, v in new_target.items():
                 if hasattr(self.target_vector, k):
                     setattr(self.target_vector, k, v)
 
+    def set_target_preset(self, preset_id: str):
+        """
+        [Main Interface] EmotionBrain이 호출하는 메인 함수.
+        특정 프리셋으로 목표를 설정합니다.
+        """
+        preset_id = preset_id.lower()
+        
+        # [Fallback] 매핑되지 않은 키 처리
+        if preset_id not in self.PRESET_VECTORS:
+            # 주요 LLM 환각 키에 대한 매핑
+            mapping = {
+                "proud": "joy",
+                "smile": "happy",
+                "laugh": "joy",
+                "cry": "sad",
+                "worried": "suspicious",
+                "love": "shy",
+                "scared": "fear"
+            }
+            if preset_id in mapping:
+                preset_id = mapping[preset_id]
+            else:
+                print(f"[Emotion] Warning: Unknown preset '{preset_id}'. Ignoring.")
+                return
+
+        with self._lock:
+            # 1. 프리셋 즉시 변경 (Brain의 결정이므로 즉시 반영)
+            self.current_preset_id = preset_id 
+            
+            # 2. 목표 벡터 설정
+            target_vals = self.PRESET_VECTORS[preset_id]
+            for k, v in target_vals.items():
+                if hasattr(self.target_vector, k):
+                    setattr(self.target_vector, k, v)
+            
+            # print(f"[Emotion] Set Target: {preset_id.upper()}")
+
     def broadcast_emotion_event(self, preset_id: str, weight: float = 1.0, duration: float = 3.0):
         """
-        [Emotion Pulse] 감정 사건(Event)을 발생시켜 프론트엔드로 브로드캐스트합니다.
+        [Emotion Pulse] 프론트엔드 동기화용 (강제 이벤트)
         """
-        print(f"[Emotion] Broadcasting Event: {preset_id} (w={weight:.2f}, d={duration}s)")
-        
         # [Fix] 유실 방지 Event Buffer
         broadcaster.publish_event("emotion_pulse", {
             "preset": preset_id,
@@ -100,20 +159,13 @@ class EmotionController:
             "duration": duration
         })
 
-    def force_preset(self, preset_id: str):
-        """
-        [Legacy Support]
-        """
-        self.broadcast_emotion_event(preset_id, weight=1.0, duration=5.0)
-
     def step(self, dt: float):
         """현재 상태를 목표 상태로 보간하고 상태 유지를 위한 Heartbeat를 쏩니다."""
-        smoothing_factor = 2.0 * dt # 속도 조절
+        smoothing_factor = 3.0 * dt # 반응 속도 상향 (Overhaul)
         
-        new_preset = "neutral"
         with self._lock:
-            # [Advanced Logic] 시간에 따른 상태 변화 (Drift)
-            self._apply_temporal_drift(dt)
+            # [Advanced Logic] 시간에 따른 상태 변화 (Drift) - Moved to Brain
+            # self._apply_temporal_drift(dt)
             
             curr = self.current_vector
             tgt = self.target_vector
@@ -133,90 +185,38 @@ class EmotionController:
             system_state.emotion.frustration = curr.frustration
             system_state.emotion.curiosity = curr.curiosity
             
-            # 3. 프리셋 변경 감지 (락 내부에서는 계산만 수행)
-            new_preset = self.get_closest_preset()
+            # [Centralized] 현재 프리셋은 Brain이 정해준 값 (`self.current_preset_id`)
+            # 별도의 get_closest_preset 로직을 거치지 않음
+            active_preset = self.current_preset_id
             
         # --- LOCK RELEASED ---
         
-        # 3. 브로드캐스트 (락 밖에서 수행하여 콜백 데드락 방지)
-        if new_preset != self.last_preset_id:
-            print(f"[Emotion] Vector State Changed: {self.last_preset_id.upper()} -> {new_preset.upper()}")
-            self.last_preset_id = new_preset
-            if new_preset != 'neutral':
-                 self.broadcast_emotion_event(new_preset, weight=1.0, duration=5.0)
+        # 3. 프리셋 변경 감지 및 브로드캐스트
+        if active_preset != self.last_preset_id:
+            print(f"[Emotion] State Transition: {self.last_preset_id.upper()} -> {active_preset.upper()}")
+            self.last_preset_id = active_preset
+            self.broadcast_emotion_event(active_preset, weight=1.0, duration=5.0)
                  
-        # 4. [New] Heartbeat (락 밖에서 수행)
-        if new_preset != 'neutral':
-            now = time.time()
-            if now - self.last_heartbeat_time > 0.5:
-                # [Fix] 데드락 방지를 위해 publish_event를 락 밖에서 호출
-                broadcaster.publish_event("emotion_pulse", {
-                    "preset": new_preset,
-                    "weight": 0.6,
-                    "duration": 1.0
-                })
-                self.last_heartbeat_time = now
+        # 4. Heartbeat (프론트엔드 동기화 유지)
+        now = time.time()
+        if now - self.last_heartbeat_time > 1.0:
+            broadcaster.publish_event("emotion_pulse", {
+                "preset": active_preset,
+                "weight": 1.0,
+                "duration": 2.0
+            })
+            self.last_heartbeat_time = now
 
-    def _apply_temporal_drift(self, dt: float):
-        """시간 경과 및 배터리 상태에 따른 목표 벡터 자동 조정"""
-        from state.system_state import system_state
-        
-        # 1. [Boredom Drift] IDLE 상태가 오래 지속되면 지루함으로 이동
-        if self.current_brain_state == "IDLE":
-             elapsed = time.time() - self.state_enter_time
-             if elapsed > 10.0: # 10초 이상 대기 시
-                 # Focus와 Effort를 서서히 낮춰서 Bored 조건(둘다 < 0.2) 충족 유도
-                 self.target_vector.focus = max(0.05, self.target_vector.focus - 0.05 * dt)
-                 self.target_vector.effort = max(0.0, self.target_vector.effort - 0.05 * dt)
-                 
+    # [Deleted] _apply_temporal_drift (Moved to Brain)
 
-
+    # [Deleted] get_closest_preset (Deprecated)
     def get_closest_preset(self) -> str:
         """
-        현재 감정 벡터(6차원)를 기반으로 프론트엔드의 20가지 프리셋 중 가장 적절한 ID를 도출합니다.
+        [Deprecated] 이제 EmotionBrain이 프리셋을 직접 결정합니다.
         """
-        vec = self.current_vector
-        
-        # 1. 극단적인 감정 상태 우선 확인 (High Intensity)
-        if vec.frustration > 0.8: return "angry"     # 극심한 좌절 -> 분노
-        if vec.confidence > 0.9: return "joy"        # 극심한 자신감 -> 환희
-        if vec.focus > 0.9: return "focused"         # 극심한 집중 -> 집중
-        
-        # [Adjusted Threshold] 지루함 조건 강화 (IDLE 초기에는 안 걸리게)
-        if vec.focus < 0.2 and vec.effort < 0.2: return "bored" 
-        
-        # 2. 복합 감정 상태 확인
-        # [Priority Change] Thinking(Curiosity) 우선순위 상향
-        # "Thinking 할 때는 무조건 Thinking 베이스여야 함"
-        if vec.curiosity > 0.6:
-            if vec.frustration > 0.4: return "confused" # 호기심 + 좌절(잘 안풀림) -> 혼란
-            if vec.confidence > 0.5: return "excited"   # 호기심 + 자신감(잘 풀림) -> 흥분/신남
-            return "thinking"                           # 순수 고민
-
-        if vec.frustration > 0.4:
-            if vec.effort > 0.5: return "pain"       # 좌절 + 노력(힘듦) -> 고통
-            if vec.confidence < 0.3: return "sad"    # 좌절 + 낮은 자신감 -> 슬픔
-            return "suspicious"                      # 단순 좌절 -> 의심/불만
-            
-        if vec.confidence > 0.6:
-            if vec.focus > 0.6: return "proud"       # 자신감 + 집중 -> 자부심
-            return "happy"                           # 단순 자신감 -> 기쁨
-             
-        if vec.focus > 0.6:
-             return "focused"                         # 단순 집중
-             
-        if vec.effort > 0.7:
-             return "tired"                           # 높은 노력 -> 피곤함
-
-        # 3. 기본 상태
-        return "neutral"
+        return self.current_preset_id
 
     def _check_preset_change(self):
-        """감정 프리셋이 변경되었는지 확인하고 이벤트를 발생시킵니다."""
-        new_preset = self.get_closest_preset()
-        
-        if new_preset != self.last_preset_id:
-            # 상태 변경 시에는 강한 펄스 전송
             vec = self.current_vector
             print(f"[Emotion] Vector State Changed: {self.last_preset_id.upper()} -> {new_preset.upper()}")
             
@@ -230,8 +230,24 @@ class EmotionController:
         if self.running: return
         self.running = True
         self.muscles = {} 
-        self.last_preset_id = "neutral" 
+        self.last_preset_id = "neutral"
+        self.current_preset_id = "neutral" # [New] Brain이 제어하는 현재 프리셋 ID
         self.current_brain_state = "IDLE" # 초기화
+        
+        # [Fix] 시작 시 강제로 IDLE Target 셋팅하여 초기값 불일치 방지
+        self.target_vector.focus = 0.25
+        self.target_vector.effort = 0.2
+        self.target_vector.frustration = 0.0
+        self.target_vector.confidence = 0.3
+        self.target_vector.curiosity = 0.1
+        
+        # Current도 초기화
+        self.current_vector.focus = 0.25
+        self.current_vector.effort = 0.2
+        self.current_vector.frustration = 0.0
+        self.current_vector.confidence = 0.3
+        self.current_vector.curiosity = 0.1
+        
         self.state_enter_time = time.time()
         
         self.thread = threading.Thread(target=self._loop, daemon=True)

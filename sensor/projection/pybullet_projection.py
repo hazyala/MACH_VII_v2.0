@@ -217,18 +217,34 @@ def _get_real_ee_state_via_shared_memory(robot_id=0, ee_index=None):
              for i in range(num_joints):
                  info = p.getJointInfo(target_robot, i, physicsClientId=_SHARED_CLIENT_ID)
                  # info[1]: jointName, info[12]: linkName
-                 if b'ee' in info[1] or b'tip' in info[1] or b'end_effector' in info[12]:
+                 # [Fix] 하이픈/언더바 모두 허용 및 'link5' (DofBot 일반적 말단) 추가
+                 link_name = info[12]
+                 joint_name = info[1]
+                 if b'ee' in joint_name or b'tip' in joint_name or b'end_effector' in link_name or b'end-effector' in link_name:
                      target_ee = i
                      break
+             
+             if target_ee is None: 
+                 # 만약 못 찾으면 link5 시도 (DofBot)
+                 for i in range(num_joints):
+                     info = p.getJointInfo(target_robot, i, physicsClientId=_SHARED_CLIENT_ID)
+                     if b'link5' in info[12]:
+                         target_ee = i
+                         break
+                         
              if target_ee is None: target_ee = num_joints - 1
              
+             # 검증 로깅
+             debug_info = p.getJointInfo(target_robot, target_ee, physicsClientId=_SHARED_CLIENT_ID)
+             logging.info(f"[PyBulletProjection] Shared Memory EE Link Selected: ID={target_ee}, Name={debug_info[12].decode()}, Joint={debug_info[1].decode()}")
+
         # 3. Get State
         state = p.getLinkState(target_robot, target_ee, computeForwardKinematics=True, physicsClientId=_SHARED_CLIENT_ID)
         # state[4]=Pos, state[5]=Orn
         return state[4], state[5], target_ee
         
     except Exception as e:
-        # logging.error(f"[PyBulletProjection] Shared Memory Access Fail: {e}")
+        logging.error(f"[PyBulletProjection] Shared Memory Access Fail: {e}")
         return None, None, None
 
 def project_gripper_camera_to_world(point_view: list, ee_pos: list, ee_orn: list) -> list:
@@ -252,6 +268,7 @@ def project_gripper_camera_to_world(point_view: list, ee_pos: list, ee_orn: list
         need_fix = True
         
     if need_fix:
+        logging.warning("[PyBulletProjection] EE 회전값 누락(Identity) 감지! 공유 메모리에서 복구를 시도합니다.")
         # [Improvement] 공유 메모리 조회
         # 로봇이 실제로 어떻게 꺾여 있는지 메모리에서 직접 가져옵니다.
         mem_pos, mem_orn, _ = _get_real_ee_state_via_shared_memory()

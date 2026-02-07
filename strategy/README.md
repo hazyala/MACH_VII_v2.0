@@ -18,7 +18,7 @@ Brain의 추상적인 의도(`Intents`)를 받아 적절한 하위 모듈(`Visua
 ### 2. VisualServoing (`visual_servoing.py`)
 **[Execution Core]**
 인식된 물체를 향해 로봇을 정밀하게 제어하는 시각 피드백 루프 시스템입니다.
-*   **Reactive Emotion**: 파지 성공/실패 여부를 감정 시스템에 브로드캐스팅하여, 로봇이 상황에 맞는 표정을 짓도록 유도합니다.
+*   **Passive Emotion Trigger**: 직접 감정 이벤트를 호출하지 않고, `SystemState`의 `arm_status`를 업데이트하여 `EmotionBrain`이 이를 감지하도록 합니다. (Centralized Control)
 *   **Logic**:
     *   접근(Approach) -> 정렬(Align) -> 파지(Grasp) -> 들어올리기(Lift)
     *   YOLO 기반 실시간 좌표 보정

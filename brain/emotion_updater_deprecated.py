@@ -44,10 +44,10 @@ class LLMUpdater:
             if agent_state == "IDLE":
                 if idle_start_time == 0:
                     idle_start_time = time.time()
-                elif time.time() - idle_start_time > 10.0:
-                    # 지루함 -> 호기심 증가
-                    # print("[Emotion-LLM] 에이전트가 지루해합니다. 호기심을 증가시킵니다.")
-                    updates["curiosity"] = 0.8
+                # [Fix] EmotionController에서 10분(600s) Time-drift를 관리하므로 중복 로직 제거
+                # elif time.time() - idle_start_time > 10.0:
+                #     # 지루함 -> 호기심 증가 (Legacy)
+                #     # updates["curiosity"] = 0.8
             else:
                 idle_start_time = 0
                 

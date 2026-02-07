@@ -8,6 +8,7 @@ export const EXPRESSIONS = [
     {
         id: "neutral",
         label: "평온",
+        vector: { focus: 0.1, effort: 0.1, confidence: 0.1, frustration: 0.0, curiosity: 0.1 },
         base: {
             leftEye: { openness: 1.0, squeeze: 0.0, smile: 0, rotation: 0 },
             rightEye: { openness: 1.0, squeeze: 0.0, smile: 0, rotation: 0 },
@@ -22,6 +23,7 @@ export const EXPRESSIONS = [
     {
         id: "happy",
         label: "기쁨",
+        vector: { focus: 0.5, effort: 0.2, confidence: 0.8, frustration: 0.0, curiosity: 0.3 },
         base: {
             leftEye: { openness: 0.9, squeeze: 0, smile: 0.25, rotation: -9 },
             rightEye: { openness: 0.9, squeeze: 0, smile: 0.25, rotation: -9 },
@@ -43,6 +45,7 @@ export const EXPRESSIONS = [
     {
         id: "joy",
         label: "환희",
+        vector: { focus: 0.6, effort: 0.3, confidence: 1.0, frustration: 0.0, curiosity: 0.5 },
         base: {
             leftEye: { openness: 0.9, squeeze: 0.3, smile: 0.3, rotation: -15 },
             rightEye: { openness: 0.9, squeeze: 0.3, smile: 0.3, rotation: -15 },
@@ -65,6 +68,7 @@ export const EXPRESSIONS = [
     {
         id: "sad",
         label: "슬픔",
+        vector: { focus: 0.2, effort: 0.5, confidence: 0.1, frustration: 0.5, curiosity: 0.1 },
         base: {
             leftEye: { openness: 0.9, squeeze: 0.1, smile: -0.1, rotation: 15 },
             rightEye: { openness: 0.9, squeeze: 0.1, smile: -0.1, rotation: 15 },
@@ -86,6 +90,7 @@ export const EXPRESSIONS = [
     {
         id: "angry",
         label: "분노",
+        vector: { focus: 0.8, effort: 0.8, confidence: 0.5, frustration: 1.0, curiosity: 0.1 },
         base: {
             leftEye: { openness: 1, squeeze: 0, smile: -0.3, rotation: -25 },
             rightEye: { openness: 1, squeeze: 0, smile: -0.3, rotation: -25 },
@@ -102,6 +107,7 @@ export const EXPRESSIONS = [
     {
         id: "surprised",
         label: "놀람",
+        vector: { focus: 0.9, effort: 0.5, confidence: 0.5, frustration: 0.0, curiosity: 1.0 },
         base: {
             leftEye: { openness: 0.9, squeeze: 0.0, smile: 0, rotation: 0 },
             rightEye: { openness: 0.9, squeeze: 0.0, smile: 0, rotation: 0 },
@@ -117,6 +123,7 @@ export const EXPRESSIONS = [
     {
         id: "suspicious",
         label: "의심",
+        vector: { focus: 0.8, effort: 0.5, confidence: 0.4, frustration: 0.5, curiosity: 0.5 },
         base: {
             leftEye: { openness: 0.45, squeeze: 1, smile: -0.06, rotation: -15 },
             rightEye: { openness: 0.45, squeeze: 1, smile: -0.06, rotation: -15 },
@@ -131,6 +138,7 @@ export const EXPRESSIONS = [
     {
         id: "thinking",
         label: "고민",
+        vector: { focus: 0.8, effort: 0.3, confidence: 0.5, frustration: 0.1, curiosity: 0.9 },
         base: {
             leftEye: { openness: 1, squeeze: 0, smile: 0, rotation: 11 },
             rightEye: { openness: 1, squeeze: 0, smile: 0, rotation: 11 },
@@ -145,6 +153,7 @@ export const EXPRESSIONS = [
     {
         id: "fear",
         label: "공포",
+        vector: { focus: 0.8, effort: 0.8, confidence: 0.0, frustration: 0.8, curiosity: 0.1 },
         base: {
             leftEye: { openness: 1, squeeze: 0.25, smile: 0, rotation: 10 },
             rightEye: { openness: 1, squeeze: 0.25, smile: 0, rotation: 10 },
@@ -161,6 +170,7 @@ export const EXPRESSIONS = [
     {
         id: "bored",
         label: "지루함",
+        vector: { focus: 0.0, effort: 0.0, confidence: 0.1, frustration: 0.1, curiosity: 0.0 },
         base: {
             leftEye: { openness: 0.3, squeeze: 0.4, smile: -0.05, rotation: 0 },
             rightEye: { openness: 0.3, squeeze: 0.4, smile: -0.05, rotation: 0 },
@@ -176,6 +186,7 @@ export const EXPRESSIONS = [
     {
         id: "tired",
         label: "피곤함",
+        vector: { focus: 0.1, effort: 1.0, confidence: 0.2, frustration: 0.2, curiosity: 0.0 },
         base: {
             leftEye: { openness: 0.41, squeeze: 0.35, smile: -0.3, rotation: -5 },
             rightEye: { openness: 0.6, squeeze: 0.11, smile: -0.3, rotation: -5 },
@@ -192,6 +203,7 @@ export const EXPRESSIONS = [
     {
         id: "excited",
         label: "흥분",
+        vector: { focus: 0.8, effort: 0.5, confidence: 0.8, frustration: 0.0, curiosity: 0.9 },
         base: {
             leftEye: { openness: 0.8, squeeze: 0.1, smile: 0.03, rotation: 7 },
             rightEye: { openness: 0.8, squeeze: 0.1, smile: 0.03, rotation: 7 },
@@ -210,6 +222,7 @@ export const EXPRESSIONS = [
     {
         id: "shy",
         label: "부끄러움",
+        vector: { focus: 0.4, effort: 0.2, confidence: 0.3, frustration: 0.0, curiosity: 0.2 },
         base: {
             leftEye: { openness: 0.7, squeeze: 0.45, smile: 0, rotation: 10 },
             rightEye: { openness: 0.7, squeeze: 0.45, smile: 0, rotation: -10 },
@@ -229,6 +242,7 @@ export const EXPRESSIONS = [
     {
         id: "confused",
         label: "혼란",
+        vector: { focus: 0.5, effort: 0.5, confidence: 0.3, frustration: 0.6, curiosity: 0.8 },
         base: {
             leftEye: { openness: 1, squeeze: 0, smile: 0, rotation: 30 },
             rightEye: { openness: 0.77, squeeze: 0.32, smile: 0, rotation: 30 },
@@ -245,6 +259,7 @@ export const EXPRESSIONS = [
     {
         id: "focused",
         label: "집중",
+        vector: { focus: 1.0, effort: 0.5, confidence: 0.6, frustration: 0.0, curiosity: 0.4 },
         base: {
             leftEye: { openness: 1, squeeze: 0.7, smile: -0.04, rotation: -8 },
             rightEye: { openness: 1, squeeze: 0.7, smile: -0.04, rotation: -8 },
@@ -259,6 +274,7 @@ export const EXPRESSIONS = [
     {
         id: "mischievous",
         label: "장난",
+        vector: { focus: 0.6, effort: 0.2, confidence: 0.8, frustration: 0.0, curiosity: 1.0 },
         base: {
             leftEye: { openness: 1, squeeze: 0.2, smile: 0.02, rotation: -6 },
             rightEye: { openness: 0.14, squeeze: 0, smile: 0.2, rotation: 15 },

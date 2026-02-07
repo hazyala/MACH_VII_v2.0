@@ -165,16 +165,31 @@ class PybulletRobot(RobotBase):
     def emergency_stop(self):
         """
         위급 상황 시 로봇의 모든 구동을 즉시 중단합니다.
+        Physical Stop: 현재 관절 각도를 읽어 유지(Hold) 명령을 전송합니다.
         """
-        logging.warning("[PybulletRobot] ⚠️  긴급 정지 발동!")
+        logging.warning("[PybulletRobot] ⚠️  긴급 정지 발동 (Physical Stop Triggered)!")
         self.stop_event.set()
+        
         try:
-            # 1. 명령 전송 중단
-            pybullet_client.current_target_pos = None
+            # 1. 현재 관절 각도 스냅샷 확보 (Hold Position)
+            current_joints = None
+            with pybullet_client.lock:
+                if 'robot' in pybullet_client.latest_state:
+                    current_joints = pybullet_client.latest_state['robot'].get('joints')
             
-            # 2. 상태 플래그 업데이트
+            # 2. 강제 정지 명령 전송 (현재 위치 유지)
+            if current_joints:
+                logging.info(f"[PybulletRobot] 현재 관절 각도로 고정: {current_joints}")
+                # 큐/비동기 무시하고 즉시 전송
+                pybullet_client.set_joints(current_joints)
+            else:
+                logging.warning("[PybulletRobot] 관절 데이터가 없어 정지 명령을 보낼 수 없습니다.")
+
+            # 3. 로컬 상태 정리
+            pybullet_client.current_target_pos = None
             self.current_state["is_moving"] = False
             
-            logging.info("[PybulletRobot] 긴급 정지 완료 - 명령 전송 중단")
+            logging.info("[PybulletRobot] 긴급 정지 완료 - 명령 전송 중단 및 Hold 명령 발송")
+            
         except Exception as e:
-            logging.error(f"[PybulletRobot] 긴급 정지 실패: {e}")
+             logging.error(f"[PybulletRobot] 긴급 정지 실패: {e}")

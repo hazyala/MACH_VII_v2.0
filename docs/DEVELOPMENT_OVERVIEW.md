@@ -71,11 +71,12 @@
 
 1.  **[26.02.07] 아키텍처 리팩토링 및 안정화** (완료)
     - **Dependency Inversion**: `ActionDispatcher` 구현으로 순환 참조 및 역할 혼재 해결.
-    - **Shared Memory Access**: 시뮬레이터 회전값(Orientation) 누락 문제를 메모리 직접 접근으로 해결.
-    - **Reactive Emotion**: 행동 결과-감정 연결 고리 구현.
+    - **Shared Memory Perception**: 시뮬레이터 회전값(Orientation) 누락 문제를 메모리 직접 접근으로 해결 (L1).
+    - **Physical Hard Stop**: 논리적 중단(`UserStopException`)과 물리적 고정(Hold Position)을 결합한 이중 안전장치 구축 (L6).
+    - **Reactive Emotion**: 물체 소실(`Lost` -> `Confused`) 등 미세 상태 변화에 반응하는 감정 회로 구현 (L5).
 2.  **[26.02] 시뮬레이션 서버(pybullet_deploy) 핵심 연동** (진행 중)
     - `sim_client` EE 카메라 및 그리퍼 피드백 수용
-    - `visual_servoing` 루프 최적화
+    - `visual_servoing` 루프 최적화 (20Hz)
 3.  **[26.02] 상태 관제탑(Control Tower) 및 3-Mode 구축** (예정)
 4.  **[26.03] 실버 시터 시입 시나리오(약 읽기, 등 긁기) 실증** (예정)
 
