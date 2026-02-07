@@ -38,6 +38,7 @@ export const FaceProvider = ({ children }) => {
 
     const livenessRef = useRef({ blinkScale: 1.0, jitterX: 0, jitterY: 0 });
     const currentBaseRef = useRef(JSON.parse(JSON.stringify(neutralBase)));
+    const currentExprIdRef = useRef('neutral'); // [New] Motion Base ID Tracking
 
     // Deduplication Set for Events
     const processedEventIdsRef = useRef(new Set());
@@ -90,23 +91,22 @@ export const FaceProvider = ({ children }) => {
     // [Handler] Preset Button Click
     const setExpression = useCallback((id) => {
         // 프리셋 버튼 클릭 시:
-        // 1. 해당 감정 이벤트를 발생시키고
-        // 2. 수동 제어 슬라이더(Base)도 해당 프리셋의 기본값으로 리셋 (선택적 UX)
-        // [Modified] Motion Sustain Logic
-        // 프리셋 선택은 '상태 전환'이므로 기존 감정을 모두 지우고(Reset),
-        // 새 감정을 '무한 지속(Infinity)'으로 설정하여 모션이 계속 반복되게 함.
+        // 1. 해당 프리셋의 Base 값을 슬라이더(TargetValues)에 적용하여 '기본 상태'로 만듭니다.
+        // 2. 기존의 Overlay 감정들을 모두 제거합니다. (Reset)
+        // 3. 현재 프리셋 ID를 업데이트하여 Loop에서 해당 Motion을 사용하게 합니다.
         const expr = EXPRESSIONS.find(e => e.id === id);
         if (expr) {
             setTargetValues(expr.base);
             targetValuesRef.current = JSON.parse(JSON.stringify(expr.base));
 
+            // UI 및 루프 참조 업데이트
+            setCurrentExprId(id);
+            currentExprIdRef.current = id;
+
             // 기존 감정 모두 제거 (Clean Slate)
             activeEmotionsRef.current = [];
-
-            // 무한 지속 모드로 푸시 (DecaySpeed = 0)
-            pushEmotion(id, 1.0, Infinity);
         }
-    }, [pushEmotion]);
+    }, []);
 
     // [Liveness Loop] Blinking & Saccades
     useEffect(() => {
@@ -253,7 +253,9 @@ export const FaceProvider = ({ children }) => {
             currentBaseRef.current = deepLerp(currentBaseRef.current, targetPose, smoothFactor);
 
             const motionOffsets = {};
-            const neutralExpr = EXPRESSIONS.find(e => e.id === 'neutral');
+            // [Modified] Motion Base Selection
+            // 기존에는 neutralExpr.motion만 사용했으나, 이제는 '현재 선택된 프리셋'의 모션을 Base로 사용합니다.
+            const currentExpr = EXPRESSIONS.find(e => e.id === currentExprIdRef.current) || neutralExpr;
             const calcWave = (m) => Math.sin(elapsed * m.freq * Math.PI * 2) * m.amp;
 
             const addMotion = (target, motionDef, weight = 1.0) => {
@@ -274,7 +276,7 @@ export const FaceProvider = ({ children }) => {
                 recurse(target, motionDef);
             };
 
-            if (neutralExpr?.motion) addMotion(motionOffsets, neutralExpr.motion, 0.5);
+            if (currentExpr?.motion) addMotion(motionOffsets, currentExpr.motion, 0.5);
 
             activeEmotionsRef.current.forEach(e => {
                 if (e.motion) addMotion(motionOffsets, e.motion, e.weight);

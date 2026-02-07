@@ -18,7 +18,7 @@
 | **L2. State** | 🟡 고도화 중 | 전역 상태 중앙 관리. `arm_status`, `focus_score` 등 관제탑 필드 추가 예정. |
 | **L3. Brain** | 🟡 운용 중 | 시터 페르소나 및 자가 수정(Self-Correction) 로직 구축 예정. |
 | **L4. Strategy** | 🟡 설계 중 | **3-Mode (Safety/Exploration/Exploitation)** 책임 분리 아키텍처 설계 중. |
-| **L5. Expression** | 🟡 제작 중 | 표정 프리셋 10종 업데이트 및 모션 파라미터 튜닝 완료. | 나머지 10종 추가, LLM 제어 구현 예정
+| **L5. Expression** | 🟢 완료 | **Expression Renewal (Phase 2) 완료.** 16종 동적 프리셋(Dynamic Motion) 탑재 및 Liveness 튜닝 완료. |
 | **L6. Embodiment** | 🟡 연동 중 | 시뮬레이션 서버(pybullet_deploy) 연동 갱신 및 서보잉 최적화 진행 중. |
 | **L7. Memory** | 🟡 운용 중 | FalkorDB 기반 에피소드 저장 및 개인화 학습 엔진 가동. |
 
@@ -54,6 +54,17 @@
     *   **Exploration**: LLM이 DB의 실패 기록을 보고 스스로 계획을 수정하여 시도.
     *   **Exploitation**: 성공 데이터 기반의 안정적이고 숙련된 동작 재현.
 *   **DB-Driven Intelligence**: FalkorDB 성공률과 현재 상황의 일치도(`db_sync_level`)에 따른 지능형 하이퍼 루프 구축.
+
+---
+
+## 🎭 4. Expression System Renewal (Phase 2 Completed)
+*   **Dynamic Motion Engine**: 단순 이미지가 아닌, `sin` 파동 기반의 실시간 모션(호흡, 떨림, 틱)이 적용된 16종의 표정 프리셋 구축.
+*   **Asset Optimization**: 사용자 피드백을 반영하여 4종(Proud, Wink, Sarcastic, Pain) 제거 및 핵심 12종 고도화.
+*   **Key Implementations**:
+    *   **Excited**: Alternating Eye Hopping (교차 점멸 모션)
+    *   **Confused**: Chaotic Lissajous Rolling (혼란스러운 눈동자 회전)
+    *   **Mischievous**: Snickering & Tougue-out (메롱 + 킥킥거림)
+    *   **Focused**: Slow Vertical Floating (호흡하며 집중)
 
 ---
 

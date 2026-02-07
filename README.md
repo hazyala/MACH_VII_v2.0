@@ -84,8 +84,8 @@
 
 ### 5️⃣ Expression Layer — 표현 계층
 *   의도를 물리적 움직임으로 변환합니다.
-*   **EmotionController (Backend)**: 상태 벡터 분석 및 프리셋 결정 (Happy, Angry 등)
-*   **FaceContext (Frontend)**: 결정된 프리셋을 60fps로 부드럽게 렌더링 (Liveness 포함)
+*   **EmotionController (Backend)**: 상태 벡터 분석 및 16종의 동적 프리셋(Excited, Mischievous 등) 결정
+*   **FaceContext (Frontend)**: 결정된 프리셋의 고유 모션(떨림, 호흡, 회전)을 60fps로 실시간 렌더링 (Liveness 포함)
 *   **출력**: `ExpressionFrame` (WebSocket Packet)
 
 ### 6️⃣ Embodiment Layer — 구현 계층

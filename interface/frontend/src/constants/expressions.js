@@ -173,129 +173,106 @@ export const EXPRESSIONS = [
             gazeY: { amp: 20, freq: 0.1 }
         }
     },
-    //현재 여기까지 구현 완료 아래부터는 구현 예정이며, 현재 아무 값이나 적당히 입력된 상태
     {
         id: "tired",
         label: "피곤함",
         base: {
-            leftEye: { openness: 0.2, squeeze: 0, smile: -0.4, rotation: -5 },
-            rightEye: { openness: 0.2, squeeze: 0, smile: -0.4, rotation: 5 },
-            gazeX: 0, gazeY: 30, mouthCurve: -20, mouthOpenness: 10, mouthX: 0, mouthY: 20, mouthRoundness: 0.3
+            leftEye: { openness: 0.41, squeeze: 0.35, smile: -0.3, rotation: -5 },
+            rightEye: { openness: 0.6, squeeze: 0.11, smile: -0.3, rotation: -5 },
+            gazeX: 0, gazeY: 30, mouthCurve: -35, mouthOpenness: -17, mouthX: 0, mouthY: 20, mouthRoundness: 1,
+            color: "#949bff"
         },
         motion: {
-            leftEye: { openness: { amp: 0.05, freq: 0.1 } },
-            rightEye: { openness: { amp: 0.05, freq: 0.1 } }
+            leftEye: { openness: { amp: 0.2, freq: 0.2 } },
+            rightEye: { openness: { amp: 0.2, freq: 0.2 } },
+            gazeY: { amp: 5, freq: 0.2 },
+            mouthOpenness: { amp: 2, freq: 0.3 }
         }
     },
     {
         id: "excited",
         label: "흥분",
         base: {
-            leftEye: { openness: 1.0, squeeze: 0.1, smile: 0.2, rotation: 0 },
-            rightEye: { openness: 1.0, squeeze: 0.1, smile: 0.2, rotation: 0 },
-            gazeX: 0, gazeY: -5, mouthCurve: 40, mouthOpenness: 20, mouthX: 0, mouthY: 0, mouthRoundness: 0
+            leftEye: { openness: 0.8, squeeze: 0.1, smile: 0.03, rotation: 7 },
+            rightEye: { openness: 0.8, squeeze: 0.1, smile: 0.03, rotation: 7 },
+            gazeX: 0, gazeY: -5, mouthCurve: -41, mouthOpenness: 31, mouthX: 0, mouthY: 0, mouthRoundness: 0,
+            color: "#f8ff94"
         },
         motion: {
-            leftEye: { openness: { amp: 0.2, freq: 4 } },
-            rightEye: { openness: { amp: 0.2, freq: 4 } },
-            mouthOpenness: { amp: 10, freq: 3 }
+            // 양쪽 눈의 크기가 번갈아 가며 변함 (Alternating Size via Negative Amp)
+            // Base 0.7 + Amp +/-0.3 -> Range 0.4 ~ 1.0, Freq 1.5
+            leftEye: { openness: { amp: 0.2, freq: 1.5 } },
+            rightEye: { openness: { amp: -0.2, freq: 1.5 } },
+            mouthOpenness: { amp: 5, freq: 3 }
         }
     },
-    {
-        id: "proud",
-        label: "자부심",
-        base: {
-            leftEye: { openness: 0.8, squeeze: 0.4, smile: 0.1, rotation: -10 },
-            rightEye: { openness: 0.8, squeeze: 0.4, smile: 0.1, rotation: 10 },
-            gazeX: 0, gazeY: -20, mouthCurve: 20, mouthOpenness: -10, mouthX: 0, mouthY: -15, mouthRoundness: 0
-        },
-        motion: {
-            mouthCurve: { amp: 5, freq: 0.3 }
-        }
-    },
+
     {
         id: "shy",
         label: "부끄러움",
         base: {
-            leftEye: { openness: 0.7, squeeze: 0.5, smile: 0, rotation: 10 },
-            rightEye: { openness: 0.7, squeeze: 0.5, smile: 0, rotation: -10 },
-            gazeX: 15, gazeY: 40, mouthCurve: 15, mouthOpenness: -5, mouthX: 0, mouthY: 5, mouthRoundness: 0.4
+            leftEye: { openness: 0.7, squeeze: 0.45, smile: 0, rotation: 10 },
+            rightEye: { openness: 0.7, squeeze: 0.45, smile: 0, rotation: -10 },
+            gazeX: 15, gazeY: 40, mouthCurve: -2, mouthOpenness: -13, mouthX: 5, mouthY: 5, mouthRoundness: 1,
+            color: "#ff94c8"
         },
         motion: {
-            gazeX: { amp: 5, freq: 1 }
+            // 부끄러워서 시선을 피함 (Gaze Avoidance - Horizontal)
+            // 좌우로 불규칙하게 불안한 시선 (Amp 15, Freq 0.8)
+            gazeX: { amp: 15, freq: 0.8 },
+            gazeY: { amp: 5, freq: 0.5 },
+            // 수줍어서 눈을 깜빡깜빡 (Nervous Blink)
+            leftEye: { squeeze: { amp: 0.05, freq: 2 } },
+            rightEye: { squeeze: { amp: 0.05, freq: 2 } }
         }
     },
     {
         id: "confused",
         label: "혼란",
         base: {
-            leftEye: { openness: 0.9, squeeze: 0, smile: -0.2, rotation: 20 },
-            rightEye: { openness: 0.6, squeeze: 0.4, smile: 0.1, rotation: -5 },
-            gazeX: -10, gazeY: -10, mouthCurve: -30, mouthOpenness: 10, mouthX: -10, mouthY: 5, mouthRoundness: 0.1
+            leftEye: { openness: 1, squeeze: 0, smile: 0, rotation: 30 },
+            rightEye: { openness: 0.77, squeeze: 0.32, smile: 0, rotation: 30 },
+            gazeX: -4, gazeY: 5, mouthCurve: -47, mouthOpenness: -24, mouthX: -10, mouthY: 5, mouthRoundness: 0,
+            color: "#00fa4b"
         },
         motion: {
-            leftEye: { rotation: { amp: 10, freq: 2 } },
-            rightEye: { openness: { amp: 0.2, freq: 1.5 } }
+            gazeX: { amp: 15, freq: 1.5 },
+            gazeY: { amp: 15, freq: 1.2 },
+            leftEye: { rotation: { amp: 20, freq: 0.5 } },
+            rightEye: { rotation: { amp: 20, freq: 0.5 } }
         }
     },
     {
         id: "focused",
         label: "집중",
         base: {
-            leftEye: { openness: 0.6, squeeze: 0.8, smile: 0.1, rotation: 15 },
-            rightEye: { openness: 0.6, squeeze: 0.8, smile: 0.1, rotation: -15 },
-            gazeX: 0, gazeY: 0, mouthCurve: -5, mouthOpenness: -20, mouthX: 0, mouthY: 0, mouthRoundness: 0
+            leftEye: { openness: 1, squeeze: 0.7, smile: -0.04, rotation: -8 },
+            rightEye: { openness: 1, squeeze: 0.7, smile: -0.04, rotation: -8 },
+            gazeX: 0, gazeY: 0, mouthCurve: -25, mouthOpenness: -18, mouthX: 0, mouthY: 0, mouthRoundness: 0.67,
+            color: "#c9ddfd"
         },
         motion: {
-            gazeX: { amp: 1, freq: 2 }
+            gazeY: { amp: 15, freq: 0.5 },
+            mouthY: { amp: 5, freq: 0.5 }
         }
     },
     {
         id: "mischievous",
         label: "장난",
         base: {
-            leftEye: { openness: 0.9, squeeze: 0.5, smile: 0, rotation: -20 },
-            rightEye: { openness: 0.4, squeeze: 0.8, smile: 0, rotation: 20 },
-            gazeX: 20, gazeY: -10, mouthCurve: 40, mouthOpenness: 0, mouthX: 15, mouthY: -5, mouthRoundness: 0
+            leftEye: { openness: 1, squeeze: 0.2, smile: 0.02, rotation: -6 },
+            rightEye: { openness: 0.14, squeeze: 0, smile: 0.2, rotation: 15 },
+            gazeX: 10, gazeY: -5, mouthCurve: 13, mouthOpenness: 20, mouthX: 4, mouthY: -5, mouthRoundness: 1,
+            color: "#e60073"
         },
         motion: {
-            mouthCurve: { amp: 10, freq: 3 }
-        }
-    },
-    {
-        id: "sarcastic",
-        label: "냉소",
-        base: {
-            leftEye: { openness: 0.5, squeeze: 0.2, smile: -0.1, rotation: 5 },
-            rightEye: { openness: 0.9, squeeze: 0, smile: -0.3, rotation: -5 },
-            gazeX: -30, gazeY: 0, mouthCurve: -40, mouthOpenness: 5, mouthX: -20, mouthY: 0, mouthRoundness: 0
-        },
-        motion: {
-            leftEye: { openness: { amp: 0.1, freq: 0.5 } }
-        }
-    },
-    {
-        id: "pain",
-        label: "고통",
-        base: {
-            leftEye: { openness: 0.1, squeeze: 1.0, smile: 0, rotation: 0 },
-            rightEye: { openness: 0.1, squeeze: 1.0, smile: 0, rotation: 0 },
-            gazeX: 0, gazeY: 0, mouthCurve: -60, mouthOpenness: 25, mouthX: 0, mouthY: 10, mouthRoundness: 0.5
-        },
-        motion: {
-            all: { amp: 5, freq: 12 }
-        }
-    },
-    {
-        id: "wink",
-        label: "윙크",
-        base: {
-            leftEye: { openness: 0.0, squeeze: 1.0, smile: 0, rotation: 0 },
-            rightEye: { openness: 1.0, squeeze: 0.0, smile: 0, rotation: 0 },
-            gazeX: 0, gazeY: 0, mouthCurve: 35, mouthOpenness: 5, mouthX: 0, mouthY: 0, mouthRoundness: 0
-        },
-        motion: {
-            rightEye: { smile: { amp: 0.1, freq: 1 } }
+            mouthOpenness: { amp: 30, freq: 1.5 },
+            mouthCurve: { amp: 10, freq: 4 },
+            leftEye: { rotation: { amp: 5, freq: 2 } },
+            rightEye: { rotation: { amp: 5, freq: 2 } }
         }
     }
+
+
+
 ];
