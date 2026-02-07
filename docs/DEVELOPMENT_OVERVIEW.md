@@ -14,12 +14,12 @@
 
 | 레이어 | 상태 | 주요 현황 요약 |
 | :--- | :---: | :--- |
-| **L1. Sensor** | 🟢 완료/확장 중 | 기초 리팩토링 완료. 그리퍼-월드 멀티 카메라 시스템 고도화 중. |
+| **L1. Sensor** | 🟢 안정화 | **Shared Memory** 기반 초저지연 상태 동기화(Orientation Recovery) 및 그리퍼 카메라 좌표계 완비. |
 | **L2. State** | 🟡 고도화 중 | 전역 상태 중앙 관리. `arm_status`, `focus_score` 등 관제탑 필드 추가 예정. |
 | **L3. Brain** | 🟡 운용 중 | 시터 페르소나 및 자가 수정(Self-Correction) 로직 구축 예정. |
-| **L4. Strategy** | 🟡 설계 중 | **3-Mode (Safety/Exploration/Exploitation)** 책임 분리 아키텍처 설계 중. |
-| **L5. Expression** | 🟢 완료 | **Expression Renewal (Phase 2) 완료.** 16종 동적 프리셋(Dynamic Motion) 탑재 및 Liveness 튜닝 완료. |
-| **L6. Embodiment** | 🟡 연동 중 | 시뮬레이션 서버(pybullet_deploy) 연동 갱신 및 서보잉 최적화 진행 중. |
+| **L4. Strategy** | 🟢 운용 중 | **ActionDispatcher** 도입으로 `RobotController` 의존성 역전 해결. `VisualServoing` 권한 격상. |
+| **L5. Expression** | 🟢 완료 | **Reactive Emotion** 탑재. 행동 결과(성공/실패)에 따른 실시간 감정 반응 루프 구축 완료. |
+| **L6. Embodiment** | 🟢 안정화 | 하드웨어 추상화 계층 정립. Digital Twin 기법(Shared Memory Access)으로 시뮬레이션 정합성 확보. |
 | **L7. Memory** | 🟡 운용 중 | FalkorDB 기반 에피소드 저장 및 개인화 학습 엔진 가동. |
 
 ---
@@ -29,10 +29,12 @@
 ### 🧿 1. 계층적 시각 및 정밀 인지 (Vision Assistant)
 *   **Hierarchical Mapping**: 그리퍼 카메라(Main)와 월드 카메라(Sub)의 데이터를 결합하여 광역 탐색 후 정밀 파지 수행.
 *   **VLM Steadycam**: 약병/처방전 읽기 시 로봇을 고정(`Soft Lock`)하여 고해상도 이미지 분석 수행 (Gemma 3 연동).
-*   **Dynamic Kinematics**: 로봇 관절값과 연동된 실시간 3D 좌표 변환으로 그리퍼 회전 시 생기는 시차 오차 제거.
+*   **Shared Memory Perception (New)**: 서버 통신 지연이나 데이터 누락(Orientation)을 극복하기 위해 물리 엔진 메모리에 직접 접근, Ground Truth 수준의 상태 동기화 달성.
 
 ### 🦾 2. 상태 관제탑 및 안전 제어 (Control Tower)
-*   **실시간 모니터링**: `sim_client.py`를 통해 서버의 `gripper_state`, `joints` 피드백을 실시간 수용.
+*   **ActionDispatcher (New)**: 기존 `RobotController`에 집중되었던 판단/분기 로직을 Strategy Layer로 이관. 
+    *   `Intents` -> `ActionDispatcher` -> `VisualServoing` or `Motion`
+    *   완전한 의존성 역전(Dependency Inversion) 실현.
 *   **Safety Loop**: 신체 접촉 시 `arm_status`(STUCK)를 감시하여 즉각적인 보호 동작 및 사과 피드백 실행.
 *   **Focus Score**: 영상 선명도 측정 알고리즘을 통해 인지 결과의 신뢰도 보장.
 
@@ -45,7 +47,7 @@
     - **Emotion System**:
         - `EmotionController` (Py): 감정 분석 및 프리셋 결정.
         - `WebSocket Bridge`: 실시간 상태 전송.
-        - `FaceContext` (JS): SVG 표정 렌더링 및 Liveness 제어. (⚠️ 지속적 튜닝 필요: DB 로그, 보간, 디버깅)
+        - `FaceContext` (JS): SVG 표정 렌더링 및 Liveness 제어.
 - **데이터 흐름**: `Chat/Voice` -> `Brain` -> `Emotion Vector` -> `Preset(Happy)` -> `WebSocket` -> `Face UI`
 
 ### 🧠 3. 성장하는 시터 (3-Mode & Self-Learning)
@@ -58,19 +60,19 @@
 ---
 
 ## 🎭 4. Expression System Renewal (Phase 2 Completed)
-*   **Dynamic Motion Engine**: 단순 이미지가 아닌, `sin` 파동 기반의 실시간 모션(호흡, 떨림, 틱)이 적용된 16종의 표정 프리셋 구축.
-*   **Asset Optimization**: 사용자 피드백을 반영하여 4종(Proud, Wink, Sarcastic, Pain) 제거 및 핵심 12종 고도화.
-*   **Key Implementations**:
-    *   **Excited**: Alternating Eye Hopping (교차 점멸 모션)
-    *   **Confused**: Chaotic Lissajous Rolling (혼란스러운 눈동자 회전)
-    *   **Mischievous**: Snickering & Tougue-out (메롱 + 킥킥거림)
-    *   **Focused**: Slow Vertical Floating (호흡하며 집중)
+*   **Reactive Emotion (New)**: 단순 명령 수행을 넘어, 행동의 결과가 감정에 영향을 미치는 순환 고리 완성.
+    *   파지 성공 -> 성취감(Proud) -> 긍정적 강화
+    *   파지 실패 -> 실망(Sad) -> 재시도 동기 부여
+*   **Dynamic Motion Engine**: `sin` 파동 기반 실시간 모션(호흡, 떨림, 틱) 적용.
 
 ---
 
 ## 🚩 주요 마일스톤 (Milestones)
 
-1.  **[26.02] 하위 레이어 기초 리팩토링** (완료)
+1.  **[26.02.07] 아키텍처 리팩토링 및 안정화** (완료)
+    - **Dependency Inversion**: `ActionDispatcher` 구현으로 순환 참조 및 역할 혼재 해결.
+    - **Shared Memory Access**: 시뮬레이터 회전값(Orientation) 누락 문제를 메모리 직접 접근으로 해결.
+    - **Reactive Emotion**: 행동 결과-감정 연결 고리 구현.
 2.  **[26.02] 시뮬레이션 서버(pybullet_deploy) 핵심 연동** (진행 중)
     - `sim_client` EE 카메라 및 그리퍼 피드백 수용
     - `visual_servoing` 루프 최적화

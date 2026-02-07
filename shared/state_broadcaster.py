@@ -57,7 +57,11 @@ class StateBroadcaster:
     def subscribe(self, callback: Callable[[Dict[str, Any]], None]):
         """상태 업데이트를 수신할 콜백 함수를 등록합니다."""
         with self._lock:
-            self.subscribers.append(callback)
+            if callback not in self.subscribers:
+                self.subscribers.append(callback)
+            else:
+                # [Fix] 중복 구독 방지 (Reload 시 누적 방지)
+                pass
             
     def publish(self, key: str, value: Any):
         """특정 상태 키를 업데이트하고 구독자들에게 알립니다."""

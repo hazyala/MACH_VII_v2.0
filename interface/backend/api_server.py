@@ -41,7 +41,11 @@ async def startup_event():
     # 7단계 레이어 아키텍처의 인스턴스를 파이프라인에 연결합니다.
     pipeline.register_component("emotion_controller", emotion_controller)
     pipeline.register_component("robot_controller", robot_controller)
+    pipeline.register_component("robot_controller", robot_controller)
     pipeline.register_component("realsense_driver", realsense_driver)
+    
+    from strategy.action_dispatcher import action_dispatcher
+    pipeline.register_component("action_dispatcher", action_dispatcher)
     
     # 메모리 연결
     memory_manager.connect()

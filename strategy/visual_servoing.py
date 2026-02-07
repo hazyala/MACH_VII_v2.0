@@ -9,6 +9,7 @@ from enum import Enum, auto
 
 from state.system_state import system_state
 from shared.state_broadcaster import broadcaster
+from expression.emotion_controller import emotion_controller
 
 class ServoState(Enum):
     """비주얼 서보잉 상태"""
@@ -64,25 +65,32 @@ class VisualServoing:
     
     def execute_approach_and_grasp(self,
                              target_label: str,
-                             get_ee_position: Callable[[], Dict[str, float]],
-                             move_robot: Callable[[float, float, float, int, bool, float], bool],  # wait_arrival, timeout 추가
-                             move_gripper: Callable[[float], bool],
-                             get_gripper_ratio: Optional[Callable[[], float]] = None,
                              grasp_offset_z: float = -1.5) -> bool:
         """
         비주얼 서보잉 접근 및 파지 (Lift 제외)
         
+        [Refactoring Note]
+        이제 RobotController를 직접 호출하므로 콜백 함수를 인자로 받지 않습니다.
+        
         Args:
             target_label: 목표 물체 이름
-            get_ee_position: 엔드이펙터 위치 조회 함수
-            move_robot: 로봇 이동 명령 함수
-            move_gripper: 그리퍼 제어 함수
-            get_gripper_ratio: 그리퍼 상태 조회 (사용 안 함)
             grasp_offset_z: 파지 깊이 오프셋
         
         Returns:
             성공 여부 (파지 완료 시 True)
         """
+        from embodiment.robot_controller import robot_controller
+
+        # 편의를 위해 내부 변수 맵핑
+        get_ee_position = robot_controller.robot_driver.get_current_pose
+        move_robot_raw = robot_controller.robot_driver.move_to_xyz
+        move_gripper = robot_controller.robot_driver.move_gripper
+        
+        # move_robot 래퍼 (기존 시그니처 호환용)
+        # RobotController의 move_to_xyz는 (x,y,z, speed, wait) 등을 받음
+        def move_robot(x, y, z, speed):
+            return move_robot_raw(x, y, z, speed=speed, wait_arrival=True)
+
         with self.lock:
             if self.is_running:
                 logging.warning("[VisualServoing] 이미 실행 중")
@@ -94,6 +102,14 @@ class VisualServoing:
         logging.info(f"[VisualServoing] '{target_label}' 접근 및 파지 시작 (Lift 제외)")
         broadcaster.publish("agent_thought", 
                           f"[VisualServoing] '{target_label}' 접근 및 파지 시작")
+        
+        # [Emotion] 시작 시 집중 모드
+        emotion_controller.broadcast_emotion_event("focused", weight=0.5, duration=3.0)
+        
+        # [Fix] 접근 전 그리퍼 열기 (100 = Open)
+        logging.info("[VisualServoing] 그리퍼 초기화: Open")
+        move_gripper(100)
+        time.sleep(0.5) # 동작 대기
         
         success = False
         self.GRASP_DEPTH = grasp_offset_z
@@ -111,6 +127,10 @@ class VisualServoing:
                         logging.info(f"[DETECT] 물체 발견: {target['name']} at {target['position']}")
                         broadcaster.publish("agent_thought", 
                                           f"[VisualServoing] '{target['name']}' 발견")
+                        
+                        # [Emotion] 발견의 기쁨
+                        emotion_controller.broadcast_emotion_event("happy", weight=0.6, duration=2.0)
+                        
                         self._transition(ServoState.VISUAL_SERVO)
                     else:
                         logging.warning(f"[DETECT] '{target_label}' 미발견, 재시도...")
@@ -119,6 +139,8 @@ class VisualServoing:
                         retry_count = getattr(self, '_detect_retry', 0)
                         if retry_count >= 3:
                             logging.error(f"[DETECT] '{target_label}' 탐지 실패 (3회)")
+                            # [Emotion] 못 찾아서 혼란/실망
+                            emotion_controller.broadcast_emotion_event("confused", weight=0.6, duration=3.0)
                             self._transition(ServoState.FAIL)
                         else:
                             self._detect_retry = retry_count + 1
@@ -127,6 +149,9 @@ class VisualServoing:
                     # 연속 제어 피드백 루프 (접근 단계)
                     if self._visual_servo_loop(target_label, get_ee_position, move_robot):
                         logging.info("[VisualServo] 1차 접근 완료. 정밀 인지 단계로 진입합니다.")
+                        # [Emotion] 접근 완료, 정밀 작업 집중
+                        emotion_controller.broadcast_emotion_event("focused", weight=0.8, duration=3.0)
+                        
                         # 바로 GRASP하지 않고, Auto-Focus -> VLM Check 로 진입
                         self._transition(ServoState.AUTO_FOCUS)
                     else:
@@ -150,6 +175,8 @@ class VisualServoing:
                         self._transition(ServoState.GRASP)
                     elif check_result == "UNCERTAIN":
                         logging.warning("[VLM] 인지 불확실. 능동 탐색(Scanning) 시작.")
+                        # [Emotion] 궁금함/고민
+                        emotion_controller.broadcast_emotion_event("thinking", weight=0.5, duration=2.0)
                         self._transition(ServoState.SCANNING)
                     else:
                         logging.error("[VLM] 판단 불가. 실패 처리.")
@@ -175,15 +202,28 @@ class VisualServoing:
                     logging.info("[GRASP] 그리퍼 닫는 중... (3.5초 대기)")
                     
                     # [Improvement] 동적 그리퍼 상태 모니터링
-                    # 고정 3.5초 대기 대신, 그리퍼가 움직임을 멈출 때까지 감시합니다.
-                    
-                    start_grasp_time = time.time()
+                    # 1. 움직임 시작 대기 (Latency 고려)
+                    start_wait_move = time.time()
+                    move_started = False
+                    while time.time() - start_wait_move < 1.0:
+                        if system_state.robot.gripper_state < 0.055: # 0.06(Open)에서 조금이라도 줄어들면 시작으로 간주
+                            move_started = True
+                            break
+                        time.sleep(0.05)
+                        
+                    if not move_started:
+                        logging.warning("[GRASP] 그리퍼가 움직이지 않습니다. (명령 유실 또는 고장)")
+                        # 그래도 진행은 해봄 (Sim lag일 수 있음)
+
+                    # 2. 완료(Stability) 감지
                     last_gripper_val = system_state.robot.gripper_state
                     stable_count = 0
                     
+                    start_grasp_time = time.time()
+                    
                     logging.info("[GRASP] 그리퍼 상태 모니터링 시작...")
                     
-                    while time.time() - start_grasp_time < 3.5:
+                    while time.time() - start_grasp_time < 3.0:
                         if self.cancel_token.is_set():
                             break
                             
@@ -215,13 +255,28 @@ class VisualServoing:
                     current_gripper = system_state.robot.gripper_state
                     logging.info(f"[GRASP] 그리퍼 최종 상태: {current_gripper:.4f}")
                     
-                    if current_gripper > 0.005: # 완전히 닫히지 않음 (=물체 파지)
+                    if current_gripper > 0.005 and current_gripper < 0.058: # 완전히 닫히지도, 완전히 열리지도 않음 (=물체 파지)
                         logging.info("[GRASP] ✅ 물체 파지 확인 (Grasp Success)")
                         broadcaster.publish("agent_thought", f"[VisualServoing] 물체 파지 성공 (Width: {current_gripper:.3f})")
+                        
+                        # [Emotion] 파지 성공! 성취감
+                        emotion_controller.broadcast_emotion_event("proud", weight=1.0, duration=5.0)
+                        
                         success = True
+                    elif current_gripper >= 0.058:
+                         logging.warning("[GRASP] ❌ 그리퍼가 닫히지 않았습니다 (Still Open)")
+                         broadcaster.publish("agent_thought", "[VisualServoing] 파지 실패 (그리퍼 동작 안함)")
+                         emotion_controller.broadcast_emotion_event("confused", weight=0.8, duration=4.0)
+                         success = False
+                         self._transition(ServoState.FAIL)
+                         break
                     else:
                         logging.warning("[GRASP] ❌ 빈손 감지 (Grasp Failed - Fully Closed)")
                         broadcaster.publish("agent_thought", "[VisualServoing] 파지 실패 (빈손)")
+                        
+                        # [Emotion] 실패... 슬픔
+                        emotion_controller.broadcast_emotion_event("sad", weight=0.8, duration=4.0)
+                        
                         success = False
                         self._transition(ServoState.FAIL)
                         break
@@ -306,6 +361,7 @@ class VisualServoing:
                     elapsed_retry = time.time() - retry_tracker
                     if elapsed_retry > 2.0:  # 2초간 못 찾으면 실패
                         logging.error("[VisualServo] 물체 소실 타임아웃 (2초)")
+                        emotion_controller.broadcast_emotion_event("confused", weight=0.5, duration=2.0)
                         return False
                     
                     logging.warning(f"[VisualServo] 물체 소실, 재탐지 대기... ({elapsed_retry:.1f}s)")

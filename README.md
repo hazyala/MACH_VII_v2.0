@@ -63,7 +63,7 @@
 ### 1️⃣ Sensor Layer — 감각 계층
 *   외부 세계를 ‘있는 그대로’ 받아들입니다.
 *   Camera, Microphone, 키보드/마우스 입력
-*   **의미 해석 ❌ / 판단 ❌**
+*   **Shared Memory Perception**: 시뮬레이터 메모리 직접 접근을 통한 초정밀 상태 동기화
 *   **출력**: `SensorFrame`
 
 ### 2️⃣ State Layer — 상태 계층
@@ -78,8 +78,10 @@
 *   **출력**: `PolicyDecision` (예: GREET, IDLE, RETREAT)
 
 ### 4️⃣ Strategy Layer — 전략 계층
-*   판단을 성향과 장기 모드에 맞게 조율합니다.
-*   Safe / Explore / Combat 모드, 성격 필터
+*   판단을 행동으로 옮기고, 성향과 모드에 맞게 조율합니다.
+*   **ActionDispatcher**: 중앙 행동 관제 및 의존성 주입 (DI)
+*   **VisualServoing**: 시각 기반 정밀 제어
+*   Safe / Explore / Combat 모드
 *   **출력**: `StrategyState`
 
 ### 5️⃣ Expression Layer — 표현 계층
@@ -91,7 +93,7 @@
 ### 6️⃣ Embodiment Layer — 구현 계층
 *   보이거나 움직이게 합니다.
 *   React 기반 얼굴 UI, 실제 로봇 하드웨어 드라이버
-*   **계산 로직 ❌**
+*   **계산 로직 ❌** (순수 실행)
 
 ### 7️⃣ Memory Layer — 기억 계층
 *   모든 결과를 기록합니다.
@@ -116,13 +118,13 @@
 
 ```
 MACH_VII_v2.0/
-├── sensor/          # [Layer 1] 감각 수집 (PerceptionManager, Drivers)
+├── sensor/          # [Layer 1] 감각 수집 (Shared Memory Vision)
 ├── state/           # [Layer 2] 상태 정의 (SystemState, Emotion)
 ├── brain/           # [Layer 3] 판단 및 로직 (LogicBrain, LLM)
 │   └── tools/       # [Tools] 에이전트 가용 도구 (Flattened)
-├── strategy/        # [Layer 4] 전략 및 성향 (StrategyManager)
+├── strategy/        # [Layer 4] 전략 및 실행 (ActionDispatcher, VisualServoing)
 ├── expression/      # [Layer 5] 표현 엔진 (EmotionController)
-├── embodiment/      # [Layer 6] 구현 계층 (Drivers, Flattened)
+├── embodiment/      # [Layer 6] 구현 계층 (Drivers)
 │   └── frontend/    # [View] React Face UI (Dumb UI)
 ├── memory/          # [Layer 7] 기억 및 로그 (FalkorDB)
 ├── shared/          # 공용 모듈 (Pipeline, Config, Broadcaster)
@@ -187,7 +189,6 @@ npm run dev
 
 ### NO REVERSE FLOW
 *   상위 레이어가 하위 레이어를 import 하는 것은 **절대 금지**입니다.
-    > **Note (Technical Debt)**: 현재 `RobotController`(Layer 6)가 `VisualServoing`(Layer 4)을 호출하는 예외가 존재합니다. 이는 시스템 안정성을 위해 일시적으로 허용된 상태이며, 추후 리팩토링 예정입니다.
 
 ### STRICT INTERFACES
 *   각 레이어는 **DTO 기반 통신**만 허용됩니다.

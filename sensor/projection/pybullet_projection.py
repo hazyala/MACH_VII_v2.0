@@ -166,94 +166,120 @@ def calculate_planar_depth(world_x_cm, world_y_cm, world_z_cm):
     
     return -view_pos[2]
 
-# [Fix] Shared Memory Connection for Ground Truth Data
-# Server가 회전값(Orientation)을 보내주지 않으므로,
-# 로컬에서 물리 엔진 메모리에 직접 접근하여 로봇의 실제 회전값을 읽어옵니다.
-# 굳이 서버 반환 요청을 안하는 이유는, 리얼센스는 SDK에서 회전값 등 모든 정보를 가져올 수 있기 때문.
-_SHARED_UID = None
-_ROBOT_ID = None
-_EE_INDEX = None
+# [Shared Memory Access]
+# User Request: "Can't we just get it from memory?" -> YES.
+# We connect to the existing PyBullet Physics Server via Shared Memory to read the True Orientation.
+_SHARED_CLIENT_ID = None
 
-def _get_real_ee_state():
+def _get_real_ee_state_via_shared_memory(robot_id=0, ee_index=None):
     """
     [Direct Memory Access]
-    PyBullet Shared Memory에 접속하여 실시간 True EE Pose(Pos, Orn)를 가져옵니다.
+    실행 중인 PyBullet 시뮬레이터의 메모리에 직접 접근하여
+    서버가 보내주지 않는 '회전값(Orientation)'을 조회합니다.
     """
-    global _SHARED_UID, _ROBOT_ID, _EE_INDEX
+    global _SHARED_CLIENT_ID
     
     if not PYBULLET_AVAILABLE: return None, None
     
     try:
-        # 1. Connection Check & Init
-        if _SHARED_UID is None:
-            # 먼저 연결 시도 (기존 연결 확인)
+        # 1. Connection (Lazy Init)
+        if _SHARED_CLIENT_ID is None:
+            # GUI 서버(id=0)가 이미 있을 수 있음
             if p.isConnected():
-                _SHARED_UID = p.getConnectionInfo()['connectionMethod']
+                _SHARED_CLIENT_ID = 0
             else:
+                # 없으면 SHARED_MEMORY로 접속 시도
                 try:
-                    _SHARED_UID = p.connect(p.SHARED_MEMORY)
+                    _SHARED_CLIENT_ID = p.connect(p.SHARED_MEMORY)
                 except:
                     return None, None
+                    
+        if _SHARED_CLIENT_ID is None or _SHARED_CLIENT_ID < 0:
+            return None, None, None
+            
+        # 2. Robot ID Finding (Cache needed)
+        target_robot = robot_id # Default 0
         
-        # 2. Robot ID Finding (First time)
-        if _ROBOT_ID is None and p.isConnected():
-            num_bodies = p.getNumBodies()
-            # 간단히 첫 번째 바디 또는 'dofbot' 검색
-            if num_bodies > 0:
-                _ROBOT_ID = 0 # DefaultAssumption
-                # EE Index Finding
-                num_joints = p.getNumJoints(_ROBOT_ID)
-                for i in range(num_joints):
-                     info = p.getJointInfo(_ROBOT_ID, i)
-                     if b'ee' in info[1] or b'tip' in info[1] or b'end_effector' in info[12]:
-                         _EE_INDEX = i
-                         break
-                if _EE_INDEX is None: _EE_INDEX = num_joints - 1
-                
-        # 3. Get State
-        if _ROBOT_ID is not None and _EE_INDEX is not None:
-             state = p.getLinkState(_ROBOT_ID, _EE_INDEX, computeForwardKinematics=True)
-             return state[4], state[5] # Pos(m), Orn(Quaternion)
+        # Auto-detect robot (Body with joints)
+        # 이미 찾았으면 패스, 아니면 검색
+        if target_robot == 0:
+            num_bodies = p.getNumBodies(physicsClientId=_SHARED_CLIENT_ID)
+            for i in range(num_bodies):
+                if p.getNumJoints(i, physicsClientId=_SHARED_CLIENT_ID) > 0:
+                    target_robot = i
+                    break
+        
+        target_ee = ee_index
+        
+        if target_ee is None:
+             # 검색: 'end_effector' or 'ee' or 'tip'
+             num_joints = p.getNumJoints(target_robot, physicsClientId=_SHARED_CLIENT_ID)
+             for i in range(num_joints):
+                 info = p.getJointInfo(target_robot, i, physicsClientId=_SHARED_CLIENT_ID)
+                 # info[1]: jointName, info[12]: linkName
+                 if b'ee' in info[1] or b'tip' in info[1] or b'end_effector' in info[12]:
+                     target_ee = i
+                     break
+             if target_ee is None: target_ee = num_joints - 1
              
-    except Exception as e:
-        logging.error(f"[PyBulletProjection] Shared Memory Access Fail: {e}")
+        # 3. Get State
+        state = p.getLinkState(target_robot, target_ee, computeForwardKinematics=True, physicsClientId=_SHARED_CLIENT_ID)
+        # state[4]=Pos, state[5]=Orn
+        return state[4], state[5], target_ee
         
-    return None, None
+    except Exception as e:
+        # logging.error(f"[PyBulletProjection] Shared Memory Access Fail: {e}")
+        return None, None, None
 
 def project_gripper_camera_to_world(point_view: list, ee_pos: list, ee_orn: list) -> list:
     """
-    [Dynamic Kinematics] 그리퍼 카메라 뷰 좌표(View Space)를 월드 좌표(World Space)로 정확히 변환합니다.
+    [Dynamic Kinematics] 
+    그리퍼 카메라에 찍힌 좌표(View Space)를 로봇 월드 좌표(World Space)로 변환합니다.
+    
+    서버가 회전값(Orientation)을 안 보내주는 경우([0,0,0,1]),
+    공유 메모리에서 진짜 회전값을 찾아와서 교체해 줍니다.
     """
     if not PYBULLET_AVAILABLE: return point_view
     
-    # [Bugfix] Server에서 Identity Orientation([0,0,0,1])만 보내는 경우
-    # Shared Memory에서 실제 Orientation을 조회하여 덮어씁니다.
-    # 단, 위치(ee_pos)는 싱크를 위해 Server 패킷값을 우선하되, Orn은 GT를 사용.
+    # 1. 회전값 누락 확인
+    # 서버가 보내준 ee_orn이 Identity([0,0,0,1] = 회전 없음)라면, 
+    # 실제로는 회전값이 누락된 것이므로 복구가 필요합니다.
+    need_fix = False
     
-    use_gt = False
-    # Identity Check (Epsilon)
-    if abs(ee_orn[0]) < 1e-4 and abs(ee_orn[1]) < 1e-4 and abs(ee_orn[2]) < 1e-4 and abs(ee_orn[3]-1) < 1e-4:
-        use_gt = True
-    elif ee_orn == [0,0,0,0]: # Invalid
-        use_gt = True
+    if ee_orn == [0,0,0,0]: # 비정상
+        need_fix = True
+    elif abs(ee_orn[0]) < 1e-4 and abs(ee_orn[1]) < 1e-4 and abs(ee_orn[2]) < 1e-4 and abs(ee_orn[3]-1) < 1e-4:
+        need_fix = True
         
-    if use_gt:
-        real_pos, real_orn = _get_real_ee_state()
-        if real_orn is not None:
-            ee_orn = real_orn
-            # logging.debug(f"[PyBulletProjection] GT Orientation Patch: {ee_orn}")
+    if need_fix:
+        # [Improvement] 공유 메모리 조회
+        # 로봇이 실제로 어떻게 꺾여 있는지 메모리에서 직접 가져옵니다.
+        mem_pos, mem_orn, _ = _get_real_ee_state_via_shared_memory()
+        
+        if mem_pos and mem_orn:
+            # [Validation] 데이터 신뢰성 검증
+            # 서버가 보낸 위치(ee_pos)와 메모리 상의 위치(mem_pos)는 거의 같아야 합니다.
+            diff = math.sqrt((ee_pos[0]-mem_pos[0])**2 + (ee_pos[1]-mem_pos[1])**2 + (ee_pos[2]-mem_pos[2])**2)
             
-    # 1. View Space -> EE Local Space 변환
-    # Basis Change: (x, y, z) -> (-y, -x, -z)
+            if diff > 0.05: # 5cm 이상 차이나면 뭔가 이상한 것 (동기화 지연 등)
+                logging.warning(f"[PyBulletProjection] 위치 불일치 경고: {diff*100:.1f}cm 차이남. (데이터 갱신 지연 가능성)")
+            else:
+                # 위치가 맞으면 회전값도 믿고 씁니다.
+                ee_orn = mem_orn
+
+    # 2. 좌표 변환: 카메라(View) -> 손끝(EE) 로컬 좌표
+    # [설명] PyBullet 카메라 좌표계와 로봇 링크 좌표계의 축 방향을 맞춥니다.
+    # View Forward(-Z)  -> Link Z (앞)
+    # View Up(Y)        -> Link -X (아래)
+    # View Right(X)     -> Link -Y (왼쪽)
+    # 결과: [-Y_view, -X_view, -Z_view]
     p_local = np.array([-point_view[1], -point_view[0], -point_view[2]]) # cm 단위
     
-    # 2. Rotate Local -> World
-    # Quaternion -> Rotation Matrix
+    # 3. 좌표 변환: 손끝(EE) -> 로봇 베이스(World)
+    # 회전 행렬(Rotation Matrix) 적용
     rot_matrix = np.array(p.getMatrixFromQuaternion(ee_orn)).reshape(3, 3)
     
-    # 3. Apply Rotation & Translation
-    # P_world = R * P_local + T
-    # T는 cm 단위로 변환 필요 (ee_pos는 m)
+    # 평행이동(Translation) 적용 (m -> cm 변환)
     t_world = np.array(ee_pos) * 100.0
     
     p_world = rot_matrix @ p_local + t_world

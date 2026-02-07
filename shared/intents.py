@@ -19,6 +19,7 @@ class ActionIntent(str, Enum):
     
     # 3. 이동 및 위치 제어 (Mobility)
     MOVE = "MOVE"                 # 특정 좌표로 이동
+    LIFT = "LIFT"                 # 들어올리기 (Pick 후속)
     LOOK_AT = "LOOK_AT"           # 특정 물체/좌표 주시
     
     # 4. 상태 및 안전 (Safety & State)
@@ -50,12 +51,31 @@ class ActionIntent(str, Enum):
             "잡아": cls.PICK_UP,
             "집어": cls.PICK_UP,
             "가져와": cls.PICK_UP,
+            "잡기": cls.PICK_UP, # [Fix] 명사형 추가
+            "집기": cls.PICK_UP,
+            "쥐어": cls.PICK_UP,
+            "들어": cls.LIFT,
+            "올려": cls.LIFT,
             "놓아": cls.PLACE,
+            "두어": cls.PLACE,
             "멈춰": cls.STOP,
             "정지": cls.STOP,
+            "그만": cls.STOP,
             "이동": cls.MOVE,
             "움직여": cls.MOVE,
             "봐": cls.LOOK_AT,
+            "쳐다봐": cls.LOOK_AT,
+            "주시": cls.LOOK_AT,
+            "대기": cls.IDLE,
+            "기다려": cls.IDLE,
+            # [Fix] 완료/과거형 문장은 새로운 행동이 아닌 대기(IDLE)로 처리
+            "잡았": cls.IDLE,
+            "했어": cls.IDLE,
+            "했습": cls.IDLE, # 했습니다
+            "완료": cls.IDLE,
+            "성공": cls.IDLE,
+            "전송": cls.IDLE,
+            "보냈": cls.IDLE,
         }
         
         for keyword, intent in mapping.items():
