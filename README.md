@@ -155,7 +155,28 @@ conda activate MACH_VII_v2.0
 # 3. 시스템 실행
 python main.py
 ```
+
 > API: `http://localhost:8000`
+
+
+### Conda 환경 설정 오류 시 해결 방법
+```bash
+# 1. Conda 가상환경 생성
+conda create -n MACH_VII_v2.0 python=3.10 pip -y
+conda activate MACH_VII_v2.0
+conda install -c conda-forge numpy scipy mkl pybullet -y
+```
+
+```bash
+# 2. 라이브러리 설치
+python -m pip install aiohttp altair annotated-doc annotated-types anyio attrs bidict blinker cachetools certifi charset-normalizer click colorama contourpy cycler dataclasses-json fastapi==0.99.1 fonttools fsspec gitpython greenlet h11 httpx huggingface-hub jinja2 jsonschema kiwisolver langchain langchain-community langchain-core langgraph langsmith matplotlib networkx opencv-python orjson packaging pandas pillow polars protobuf psutil pyarrow pydeck pyparsing pyrealsense2 python-dotenv python-socketio pytz pyyaml redis requests safetensors sqlalchemy starlette streamlit sympy tenacity tokenizers tqdm transformers typing-extensions ultralytics uvicorn watchdog websockets websocket-client yarl zstandard
+```
+
+```bash
+# 3. 충돌 가능성 있는 라이브러리 설치
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+```
+
 
 ### 3. Frontend (React)
 ```bash
@@ -168,6 +189,7 @@ npm install
 npm run dev
 ```
 > UI: `http://localhost:5173`
+
 
 ### 🛠️ Utilities & Debug Tools
 시스템의 각 구성 요소를 독립적으로 테스트하거나 상태를 모니터링하기 위한 도구들입니다.
