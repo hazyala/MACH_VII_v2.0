@@ -17,6 +17,7 @@ class PyBulletClient:
     def __init__(self):
         if self.initialized: return
         self.sio = socketio.Client()
+        # GlobalConfig에서 PyBullet 서버 URL 가져오기 (포트: 5001)
         self.server_url = GlobalConfig.SIM_SERVER_URL
         self.connected = False
         self.latest_state = {}

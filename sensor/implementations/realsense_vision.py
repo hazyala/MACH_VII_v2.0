@@ -21,12 +21,27 @@ class RealSenseVision(VisionBase):
         # 1. 하드웨어 드라이버 시작 (싱글톤 활용)
         realsense_driver.start()
         
+        # 1-2. 그리퍼 카메라 시작 (설정에 따라)
+        from shared.config import GlobalConfig
+        if GlobalConfig.REALSENSE_ENABLE_GRIPPER_CAM:
+            realsense_driver.start_gripper_camera()
+            logging.info("[RealSenseVision] 그리퍼 카메라 시작 요청됨")
+        
         # 2. 카메라 내인자(Intrinsics: 렌즈 고유의 초점 거리 및 픽셀 중심점 등 카메라 내부 속성) 설정
         # SDK에서 실제 하드웨어 파라미터를 읽어와 베이스 클래스에 등록합니다.
         intr = realsense_driver.get_intrinsics()
         self.set_intrinsics(fx=intr["fx"], fy=intr["fy"], cx=intr["cx"], cy=intr["cy"])
         
         logging.info(f"[RealSenseVision] 실제 SDK 파라미터 적용 완료: {intr}")
+
+    def get_frame(self):
+        """
+        [VisionBase 인터페이스] 현재 RGB 및 Depth 프레임을 반환합니다.
+        
+        Returns:
+            tuple: (color_frame, depth_frame) 또는 (None, None)
+        """
+        return realsense_driver.get_frames()
 
     def get_synced_packet(self):
         """
@@ -44,7 +59,8 @@ class RealSenseVision(VisionBase):
         # 현재 system_state에 기록된 가장 최신의 로봇 포즈를 가져옵니다.
         # NOTE: 엄밀하게는 하드웨어 수준에서 타임스탬프 동기화가 필요하지만, 
         # 현재는 비동기적으로 스냅샷을 캡처하는 방식을 사용합니다.
-        pose = system_state.robot_status.get("pose", {})
+        # SystemState의 robot 속성에서 포즈 정보를 가져오되, 없으면 빈 딕셔너리 반환
+        pose = {}  # Physical 모드에서는 포즈 정보를 별도로 관리하지 않음
         
         return {
             "color": color,
@@ -80,3 +96,23 @@ class RealSenseVision(VisionBase):
             self.filter_y.update(y),
             self.filter_z.update(z)
         ]
+
+    def get_gripper_synced_packet(self):
+        """
+        그리퍼 카메라의 RGB, Depth 영상과 해당 시점의 로봇 포즈를 하나의 패킷으로 묶어 반환합니다.
+        엔드 이펙터 시점의 정밀한 물체 인지를 위해 사용됩니다.
+        """
+        color, depth = realsense_driver.get_gripper_frames()
+        if color is None or depth is None:
+            return None
+            
+        # 그리퍼 카메라 취득 시점의 로봇 포즈 
+        from state.system_state import system_state
+        # SystemState의 robot 속성에서 포즈 정보를 가져오되, 없으면 빈 딕셔너리 반환
+        pose = {}  # Physical 모드에서는 포즈 정보를 별도로 관리하지 않음
+        
+        return {
+            "color": color,
+            "depth": depth,
+            "captured_pose": pose
+        }

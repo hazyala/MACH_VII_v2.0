@@ -4,23 +4,38 @@ from dotenv import load_dotenv # 환경 변수 로드용
 
 class GlobalConfig:
     """시스템 전역 설정 클래스입니다."""
-    SIM_MODE = True # 현재 시스템이 시뮬레이션(PyBullet) 모드인지, 실제 로봇 모드인지 결정하는 스위치
+    SIM_MODE = False # 현재 시스템이 시뮬레이션(PyBullet) 모드인지, 실제 로봇 모드인지 결정하는 스위치
     
     # 브레인(Brain) 설정
     VLM_ENDPOINT = "http://ollama.aikopo.net/api/generate" # 엔드포인트를 통해 호출할 모델 주소
     VLM_MODEL = "gemma3:27b" # 엔드포인트를 통해 호출할 모델 이름
     
-    # 통신 및 서버 설정
-    SIM_SERVER_URL = "http://localhost:5000" # 시뮬레이션 서버 URL
-    API_PORT = 8000 # API 서버 포트
+    # PyBullet 서버 설정 (포트 충돌 방지를 위해 5001로 변경)
+    # DOFBOT 서버가 포트 5000을 사용하므로 PyBullet은 5001을 사용합니다
+    PYBULLET_HOST = "localhost"
+    PYBULLET_PORT = 5001
+    SIM_SERVER_URL = f"http://{PYBULLET_HOST}:{PYBULLET_PORT}"
+    
+    # DOFBOT 서버 설정 (클라이언트로 연결)
+    # DOFBOT_ROBOT_ARM-main/main.py 서버와 통신합니다
+    DOFBOT_SERVER_HOST = "192.168.25.100"  # 실제 DOFBOT이 다른 PC에 있다면 해당 IP로 변경
+    DOFBOT_SERVER_PORT = 5000
+    DOFBOT_SERVER_URL = f"http://{DOFBOT_SERVER_HOST}:{DOFBOT_SERVER_PORT}"
+    
+    # API 서버 포트
+    API_PORT = 8000
     
     # 감정(Emotion) 설정
     EMOTION_UPDATE_INTERVAL = 0.5  # 초 단위 (저수준 LLM 업데이트 주기)
     EMOTION_RENDER_FPS = 60        # 초당 프레임 수 (고수준 보간 루프로 60fps)
     
-    # 로봇(Robot) 및 센서(Sensor) 설정
-    ROBOT_IP = "192.168.0.100"     # DOFBOT IP 주소 (과거 종민이랑 연결했던 IP 기반)
-    CAMERA_FPS = 30 # 카메라 FPS 
+    # RealSense 카메라 설정
+    REALSENSE_ENABLE_GRIPPER_CAM = True  # 그리퍼 카메라 활성화 여부
+    REALSENSE_ENABLE_IMU = True  # IMU(가속도/자이로) 데이터 활성화 여부
+    CAMERA_FPS = 30 # 카메라 FPS
+    
+    # 레거시 호환성 (기존 코드와의 호환을 위해 유지)
+    ROBOT_IP = DOFBOT_SERVER_URL  # 기존 ROBOT_IP를 DOFBOT_SERVER_URL로 매핑 
 
 class CameraConfig:
     """카메라 설치 위치 및 오프셋 설정 클래스입니다."""
@@ -30,7 +45,7 @@ class CameraConfig:
     SIM_OFFSET = {"x": 50.0, "y": 0.0, "z": 50.0}  # cm 단위
     
     # 실물 환경 (Intel RealSense) 오프셋 
-    REAL_OFFSET = {"x": 30.0, "y": 0.0, "z": 20.0} #(일단 지금 사용 안해서 아무렇게나 잡아둠)
+    REAL_OFFSET = {"x": 63.0, "y": 0.0, "z": 54.0} #(일단 자로 재긴 했는데 정확함은 나중에 확인 필요) cm 단위
     
 class PathConfig:
     """pathlib을 사용한 경로 관리 클래스입니다."""

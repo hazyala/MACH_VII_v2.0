@@ -79,8 +79,13 @@ class VisionBridge:
         """
         실시간으로 카메라 소스를 전환합니다.
         Args:
-            source_key: 'main', 'gripper'
+            source_key: 'main', 'gripper', 'realsense'
         """
+        # 'realsense' 소스 요청 시 'main' 소스로 자동 매핑
+        if source_key == 'realsense':
+            source_key = 'main'
+            logging.info("[VisionBridge] 'realsense' 소스 요청 → 'main' 소스로 매핑됨")
+        
         if source_key not in self.drivers:
             logging.warning(f"[VisionBridge] 알 수 없는 소스: {source_key}")
             return
@@ -151,14 +156,16 @@ class VisionBridge:
         # 1. 동기화 패킷 획득 (현재 소스에 따라 변경)
         packet = self._fetch_packet()
         if not packet:
-            return []
+            # 패킷 없음 - 빈 결과와 None 프레임 반환
+            return [], None
 
         color_frame = packet.get("color")
         depth_frame = packet.get("depth")
         captured_pose = packet.get("captured_pose", {})
         
         if color_frame is None or depth_frame is None:
-            return []
+            # 프레임 누락 - 빈 결과와 가용 프레임 반환
+            return [], color_frame
 
         # 2. YOLO 2D 객체 탐지
         raw_detections = self.yolo.detect(color_frame)
@@ -251,6 +258,7 @@ class VisionBridge:
                     "sync_pose": captured_pose
                 })
                 
+        # 항상 튜플 (list, frame)을 반환하도록 보장
         return refined_list, color_frame
 
     # NOTE: 백그라운드 업데이트 루프는 PerceptionManager에서 통합 관리하므로

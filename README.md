@@ -141,10 +141,22 @@ MACH_VII_v2.0/
 
 ## 🚀 실행 방법
 
+### 0. 중요: 포트 설정
+
+**PyBullet 시뮬레이션 서버와 DOFBOT 실물 로봇 서버의 포트 충돌을 방지하기 위해 다음과 같이 설정되어 있습니다:**
+
+- **PyBullet 서버**: `http://localhost:5001` (기본 5000에서 변경됨)
+- **DOFBOT 서버**: `http://localhost:5000` (DOFBOT_ROBOT_ARM-main/main.py)
+- **MACH_VII API**: `http://localhost:8000`
+
+> **주의**: PyBullet 시뮬레이션 서버를 사용하는 경우, 해당 서버도 **포트 5001**로 실행해야 합니다.
+
 ### 1. 필수 환경
 *   **Anaconda / Miniconda**
 *   **Node.js v18+**
-*   **Python 3.14+**
+*   **Python 3.10+**
+*   **(선택) DOFBOT 실물 로봇** - 실물 모드 사용 시
+*   **(선택) Intel RealSense 카메라** - 실물 비전 사용 시
 
 ### 2. Backend (Conda + Docker)
 ```bash
@@ -155,7 +167,16 @@ docker-compose up -d
 conda env create -f environment.yml
 conda activate MACH_VII_v2.0
 
-# 3. 시스템 실행
+# 3-1. (선택) DOFBOT 실물 로봇 서버 실행
+# 별도 터미널에서 실행 (d:\Army\DOFBOT_ROBOT_ARM-main)
+cd ..\DOFBOT_ROBOT_ARM-main
+python main.py
+# DOFBOT 서버가 포트 5000에서 실행됩니다
+
+# 3-2. MACH_VII 시스템 실행
+# shared/config.py에서 SIM_MODE를 설정:
+# - SIM_MODE = True: PyBullet 시뮬레이션 사용 (기본값)
+# - SIM_MODE = False: DOFBOT 실물 로봇 사용
 python main.py
 ```
 
