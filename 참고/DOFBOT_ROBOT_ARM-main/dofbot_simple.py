@@ -107,6 +107,36 @@ class DofbotSimple:
 
         print(f"Moving to: {x:.2f}, {y:.2f}, {z:.2f}")
         self._send_servos(ik_angles, duration_ms)
+    
+    #관절 각도를 직접 설정하는 함수 (degrees 단위)
+    def set_joints_direct(self, joints_deg, duration_ms=1500):
+        """
+        관절 각도를 직접 설정합니다 (IK 우회).
+        joints_deg: [j1, j2, j3, j4, j5] 각도 리스트 (degrees)
+        """
+        if len(joints_deg) != 5:
+            print(f"Error: Expected 5 joint angles, got {len(joints_deg)}")
+            return
+        
+        # Degrees를 서보 각도(0~180)로 변환
+        # 클라이언트에서 보낸 각도가 -90~90 범위라고 가정하면 +90 오프셋
+        safe = [int(max(0, min(180, j + 90))) for j in joints_deg]
+        
+        print(f"Setting Joints Directly: {joints_deg} -> Servo:{safe}")
+        
+        # 서보 모터에 직접 명령
+        self.Arm.Arm_serial_servo_write6(
+            safe[0], safe[1], safe[2],
+            safe[3], safe[4], self.gripper_angle if self.gripper_angle is not None else 90,
+            int(duration_ms)
+        )
+        
+        # FK로 예상 위치 계산 (상태 동기화)
+        ik_joints = [0] + [math.radians(j) for j in joints_deg] + [0]
+        self.last_joints = ik_joints
+        transformation_matrix = self.chain.forward_kinematics(ik_joints)
+        current_pos = transformation_matrix[:3, 3]
+        self.last_pos = [current_pos[0], current_pos[1], current_pos[2]]
 
     #IKPy에서 계산한 관절 각도를 서보모터 각도로 변환
     def _send_servos(self, ik_angles, duration_ms):

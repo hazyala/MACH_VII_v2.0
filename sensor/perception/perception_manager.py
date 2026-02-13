@@ -55,7 +55,8 @@ class PerceptionManager:
             try:
                 # 1. 시각 탐지 및 3D 좌표 산출 (Main Camera 기준)
                 # VisionBridge를 통해 필터링된 객체 리스트와 당시의 프레임을 함께 가져옵니다.
-                detections, main_frame = self.bridge.get_refined_detections()
+                # [Update] Depth 프레임도 함께 수신 (list, color, depth)
+                detections, main_frame, main_depth = self.bridge.get_refined_detections()
                 
                 # 2. 전역 상태(Layer 2: State) 업데이트
                 new_perception = {
@@ -72,18 +73,34 @@ class PerceptionManager:
                      ret, buffer = cv2.imencode('.jpg', main_frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
                      if ret:
                          system_state.last_frame_base64 = base64.b64encode(buffer).decode('utf-8')
+
+                # [New] Main Depth Frame Encoding
+                if main_depth is not None:
+                    # Depth 정규화 및 컬러맵 적용 (시각화용)
+                    # 1. 미터 단위를 0~255 스케일로 변환 (예: 0~2m 구간 강조)
+                    depth_vis = cv2.normalize(main_depth, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                    depth_vis = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
+                    
+                    ret, buffer_d = cv2.imencode('.jpg', depth_vis, [cv2.IMWRITE_JPEG_QUALITY, 50]) # 품질 낮춤
+                    if ret:
+                        system_state.last_depth_base64 = base64.b64encode(buffer_d).decode('utf-8')
                     
                 # 2-2. [Secondary Stream] 그리퍼 카메라 프레임 획득 (디버깅용)
                 # 메인 뷰와 별개로 그리퍼의 시점을 상시 확보합니다.
-                gripper_frame = self.bridge.get_gripper_frame()
+                gripper_frame, gripper_depth = self.bridge.get_gripper_frame()
+                
                 if gripper_frame is not None:
                      ret, buffer_ee = cv2.imencode('.jpg', gripper_frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
                      if ret:
                          system_state.last_ee_frame_base64 = base64.b64encode(buffer_ee).decode('utf-8')
-                else:
-                    # 그리퍼 카메라 미수신 시 상태 초기화 (옵션)
-                    # system_state.last_ee_frame_base64 = None
-                    pass
+                
+                if gripper_depth is not None:
+                    depth_ee_vis = cv2.normalize(gripper_depth, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                    depth_ee_vis = cv2.applyColorMap(depth_ee_vis, cv2.COLORMAP_JET)
+                    
+                    ret, buffer_ee_d = cv2.imencode('.jpg', depth_ee_vis, [cv2.IMWRITE_JPEG_QUALITY, 50])
+                    if ret:
+                        system_state.last_ee_depth_base64 = base64.b64encode(buffer_ee_d).decode('utf-8')
                 
                 # [Control Tower] 로봇 상태 동기화 및 안전 감시
                 # 시뮬레이션 클라이언트로부터 최신 로봇 상태를 가져와 SystemState에 반영합니다.

@@ -18,7 +18,7 @@ graph LR
 ```
 
 ### 레이어별 현재 역할 (Current Implementation)
-1.  **Sensor (L1)**: **[리팩토링 완료]** `VisionBridge`를 통해 Sim/Real 영상을 획득하고 YOLOv11로 객체를 탐지하여 3D 좌표를 산출합니다.
+1.  **Sensor (L1)**: **[개선 완료]** `VisionBridge`를 통해 Sim/Real 영상을 획득하고 YOLOv11로 객체를 탐지하여 3D 좌표를 산출합니다. RealSense 드라이버의 타임아웃 처리가 개선되었으며(3초), IMU 데이터 API가 일관성 있게 수정되었습니다.
 2.  **State (L2)**: **[운용 중]** `system_state.py`가 모든 레이어의 공통 참조 데이터를 중앙 관리합니다.
 3.  **Brain (L3)**: **[운용 중]** LogicBrain이 LLM과 연동하여 작업의 의도를 결정합니다.
 4.  **Strategy (L4)**: **[고도화 완료]** 'Intelligent Eye' 능동 인지 상태 기계 및 비주얼 서보잉이 통합되었습니다.

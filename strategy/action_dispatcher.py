@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from shared.state_broadcaster import broadcaster
 from strategy.visual_servoing import visual_servoing
 from embodiment.robot_controller import robot_controller
@@ -104,15 +105,48 @@ class ActionDispatcher:
             broadcaster.publish("agent_thought", f"[Dispatcher] '{final_label}' 공략 실패.")
 
     def _dispatch_greet(self):
-        """단순 인사 동작"""
-        broadcaster.publish("agent_thought", "[Dispatcher] 인사를 수행합니다.")
-        # 하드웨어 제어는 RobotController에게 직접 명령
-        # (복잡한 로직이 없으므로 Strategy 없이 바로 Embodiment 호출)
-        robot_controller.robot_driver.move_to_xyz(25, 5, 30)
-        import time; time.sleep(0.4)
-        robot_controller.robot_driver.move_to_xyz(25, -5, 30)
-        time.sleep(0.4)
-        robot_controller.robot_driver.move_to_xyz(25, 0, 30)
+        """
+        [Strategy] 전신 인사 (Coordinate Control + Joint Control)
+        손을 흔드는 동작은 move_to_xyz를 사용하고,
+        기본 자세 복귀는 set_joints를 사용하여 명시적으로 수직 일직선 자세를 만듭니다.
+        """
+        broadcaster.publish("agent_thought", "[Dispatcher] 반갑게 인사를 건넵니다.")
+        
+        try:
+            # 기본 자세 정의 (xyz 좌표)
+            BASE_X = 25.0  # cm
+            BASE_Y = 0.0   # cm (중앙)
+            
+            # 수직 일직선 기본 자세 (관절각, degrees)
+            # 실제 로봇에서 수동으로 수직 자세를 만들고 측정한 값
+            # 위치: x=25, y=0, z=25 (cm)
+            BASE_JOINTS = [0, -21, -3, -72, 0]
+            
+            # 1. 안녕 동작 수행 (xyz 좌표 사용)
+            greet_z = 25.0
+            
+            # 2. 손 흔들기 (Y축 좌우)
+            for _ in range(2):
+                # Left
+                robot_controller.robot_driver.move_to_xyz(BASE_X, BASE_Y + 5.0, greet_z)
+                time.sleep(0.8)
+                # Right
+                robot_controller.robot_driver.move_to_xyz(BASE_X, BASE_Y - 5.0, greet_z)
+                time.sleep(0.8)
+            
+            # 3. 중앙 복귀
+            robot_controller.robot_driver.move_to_xyz(BASE_X, BASE_Y, greet_z)
+            time.sleep(1.0)
+            
+            # 4. 기본 자세로 복귀 (관절각 사용 - 수직 일직선)
+            logging.info(f"[Dispatcher] 기본 자세 복귀: {BASE_JOINTS}")
+            robot_controller.robot_driver.set_joints(BASE_JOINTS)
+            time.sleep(1.5)
+            
+            broadcaster.publish("agent_thought", "[Dispatcher] 인사를 마치고 기본 자세로 돌아왔습니다.")
+
+        except Exception as e:
+            logging.error(f"[Dispatcher] 인사 동작 실패: {e}")
 
     def _dispatch_lift(self):
         """들어올리기 동작"""

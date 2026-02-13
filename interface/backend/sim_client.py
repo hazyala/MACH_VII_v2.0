@@ -1,4 +1,8 @@
-import socketio
+try:
+    import socketio
+except ImportError:
+    socketio = None
+    
 import threading
 import time
 import requests
@@ -16,7 +20,7 @@ class PyBulletClient:
 
     def __init__(self):
         if self.initialized: return
-        self.sio = socketio.Client()
+        self.sio = socketio.Client() if socketio else None
         # GlobalConfig에서 PyBullet 서버 URL 가져오기 (포트: 5001)
         self.server_url = GlobalConfig.SIM_SERVER_URL
         self.connected = False
@@ -25,10 +29,12 @@ class PyBulletClient:
         self.connect_lock = threading.Lock()
         
         # Callbacks
-        self.sio.on('connect', self.on_connect)
-        self.sio.on('disconnect', self.on_disconnect)
-        self.sio.on('robot_state', self.on_robot_state)
-        self.sio.on('object_state', self.on_object_state)
+        # 이벤트 핸들러 등록
+        if self.sio:
+            self.sio.on('connect', self.on_connect)
+            self.sio.on('disconnect', self.on_disconnect)
+            self.sio.on('robot_state', self.on_robot_state)
+            self.sio.on('object_state', self.on_object_state)
         
         self.initialized = True
         
@@ -55,8 +61,12 @@ class PyBulletClient:
                     logging.info("[PyBullet] 이미 연결된 상태입니다. (Flag 보정)")
                     self.connected = True
                 else:
-                    logging.error(f"[PyBullet] Connection failed: {e}")
-                    logging.warning("[PyBullet] 시뮬레이션 서버가 실행 중인지 확인하세요. (기본값: http://localhost:5000)")
+                    msg = f"[PyBullet] Connection failed: {e}"
+                    if GlobalConfig.SIM_MODE:
+                        logging.error(msg)
+                        logging.warning("[PyBullet] 시뮬레이션 서버가 실행 중인지 확인하세요.")
+                    else:
+                        logging.debug(msg + " (실물 모드이므로 시뮬레이션 서버가 없어도 무방함)")
                     self.connected = False
 
     def on_connect(self):

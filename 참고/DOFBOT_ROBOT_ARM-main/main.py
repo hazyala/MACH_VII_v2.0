@@ -49,6 +49,14 @@ def handle_set_force(data):
             shared.command["force"] = data["force"]
             print(f"=== [SERVER] Shared Command Updated: {shared.command['gripper_cmd']} ===")
 
+@socketio.on('set_joints')
+def handle_set_joints(data):
+    """관절각 명령 핸들러"""
+    if 'joints' in data:
+        with shared.cmd_lock:
+            shared.command["joint_cmd"] = data['joints']
+        print(f"=== [SERVER] Received Joints Command: {data['joints']} ===")
+
 @socketio.on('set_max_velocity')
 def handle_set_max_velocity(data):
     if 'max_velocity' in data:

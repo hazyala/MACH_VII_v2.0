@@ -154,9 +154,13 @@ class PybulletRobot(RobotBase):
         5개 관절의 각도를 직접 제어합니다.
         """
         try:
-            logging.info(f"[PybulletRobot] 관절 각도 설정: {[f'{a:.1f}°' for a in angles]} @ speed={speed}")
-            pybullet_client.set_joints(angles)
-            self.current_state["joints"] = angles
+            import math
+            # PyBullet은 Radian 단위를 사용하므로 Degree -> Radian 변환
+            joints_rad = [math.radians(a) for a in angles]
+            
+            logging.info(f"[PybulletRobot] 관절 각도 설정: {angles} (deg) -> {[f'{r:.3f}' for r in joints_rad]} (rad)")
+            pybullet_client.set_joints(joints_rad)
+            self.current_state["joints"] = angles # 상태는 Degree로 유지
             return True
         except Exception as e:
             logging.error(f"[PybulletRobot] 관절 제어 실패: {e}")

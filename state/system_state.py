@@ -34,7 +34,9 @@ class SystemState:
     
     # VLM 분석을 위한 최신 프레임 (Base64 Encoded JPEG)
     last_frame_base64: Optional[str] = None
+    last_depth_base64: Optional[str] = None    # 메인 카메라 Depth
     last_ee_frame_base64: Optional[str] = None # 그리퍼 카메라 프레임
+    last_ee_depth_base64: Optional[str] = None # 그리퍼 카메라 Depth
     
     # 현재 활성화된 Intent (Brain이 결정한 의도)
     current_intent: str = "IDLE"

@@ -167,21 +167,6 @@ docker-compose up -d
 conda env create -f environment.yml
 conda activate MACH_VII_v2.0
 
-# 3-1. (선택) DOFBOT 실물 로봇 서버 실행
-# 별도 터미널에서 실행 (d:\Army\DOFBOT_ROBOT_ARM-main)
-cd ..\DOFBOT_ROBOT_ARM-main
-python main.py
-# DOFBOT 서버가 포트 5000에서 실행됩니다
-
-# 3-2. MACH_VII 시스템 실행
-# shared/config.py에서 SIM_MODE를 설정:
-# - SIM_MODE = True: PyBullet 시뮬레이션 사용 (기본값)
-# - SIM_MODE = False: DOFBOT 실물 로봇 사용
-python main.py
-```
-
-> API: `http://localhost:8000`
-
 
 ### Conda 환경 설정 오류 시 해결 방법
 ```bash

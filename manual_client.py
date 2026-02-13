@@ -22,8 +22,8 @@ class MachTermClient:
         self.running = True
         self.latest_emotion = "IDLE"
         self.current_config = SystemConfigurationDTO(
-            target_robot=RobotTarget.VIRTUAL,
-            active_camera=CameraSource.VIRTUAL,
+            target_robot=RobotTarget.PHYSICAL,
+            active_camera=CameraSource.REAL,
             op_mode=OperationMode.RULE_BASED
         )
         self.mode = "MENU" # MENU or CHAT

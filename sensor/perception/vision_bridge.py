@@ -50,9 +50,12 @@ class VisionBridge:
     def _setup_real_source(self):
         """실물(RealSense) 비전 소스를 구성합니다."""
         # TODO: 실제 환경에서도 그리퍼 카메라가 있다면 추가
-        self.drivers['main'] = RealSenseVision()
+        real_vision = RealSenseVision()
+        self.drivers['main'] = real_vision
+        self.drivers['gripper'] = real_vision # 그리퍼 드라이버 등록 (동일 인스턴스 공유)
+        
         self.offset = CameraConfig.REAL_OFFSET
-        logging.info("[VisionBridge] 실물 비전(RealSense) 소스 연결됨.")
+        logging.info("[VisionBridge] 실물 비전(RealSense) 소스 연결됨 (Main + Gripper).")
 
     def set_mode(self, mode: str):
         """
@@ -130,18 +133,28 @@ class VisionBridge:
         """
         [Helper] 그리퍼 카메라의 영상을 별도로 가져옵니다 (멀티뷰 디버깅용).
         """
-        if 'gripper' not in self.drivers: return None
+        if 'gripper' not in self.drivers: return None, None
         
         driver = self.drivers['gripper']
         # Sim Mode: same instance, use capture_gripper
         if self.sim_mode:
-            # 디버깅용이므로 뎁스 데이터는 제외하여 속도 향상
-            packet = driver.capture_gripper(include_depth=False)
-            return packet.get("color") if packet else None
+            # 디버깅용 뎁스 데이터 포함
+            packet = driver.capture_gripper(include_depth=True)
+            if packet:
+                return packet.get("color"), packet.get("depth")
+            return None, None
         else:
             # Real Mode: if separate driver exists
+            
             # TODO: 실물 그리퍼 카메라 드라이버 연동
-            return None
+            # 현재는 Main Driver가 Gripper 카메라이기도 한 경우(Singleton)를 고려해야 함
+            # 하지만 VisionBridge 구조상 drivers['main']과 drivers['gripper']가 분리되어 있을 수 있음.
+            
+            # 임시: 그리퍼 드라이버가 있으면 가져오기
+            packet = driver.get_gripper_synced_packet() # 그리퍼 전용 패킷 메서드 호출
+            if packet:
+                 return packet.get("color"), packet.get("depth")
+            return None, None
 
     def get_refined_detections(self) -> list:
         """
@@ -157,7 +170,7 @@ class VisionBridge:
         packet = self._fetch_packet()
         if not packet:
             # 패킷 없음 - 빈 결과와 None 프레임 반환
-            return [], None
+            return [], None, None
 
         color_frame = packet.get("color")
         depth_frame = packet.get("depth")
@@ -165,7 +178,7 @@ class VisionBridge:
         
         if color_frame is None or depth_frame is None:
             # 프레임 누락 - 빈 결과와 가용 프레임 반환
-            return [], color_frame
+            return [], color_frame, None
 
         # 2. YOLO 2D 객체 탐지
         raw_detections = self.yolo.detect(color_frame)
@@ -204,8 +217,6 @@ class VisionBridge:
                 # ROI 분석 불가 시 중앙점 값 사용 (Fallback: 대비책)
                 depth_m = depth_frame[v, u] if v < depth_frame.shape[0] and u < depth_frame.shape[1] else 0
             
-            if depth_m <= 0.1: continue
-
             if depth_m <= 0.1: continue
 
             # 4. 픽셀-to-3D 변환 (cm 단위)
@@ -249,17 +260,18 @@ class VisionBridge:
                     rz = coords_cm[2] + self.offset["z"]
                     log_type = "로봇베이스"
                 
-                logging.info(f"[VisionBridge] 탐지 완료: '{det['name']}' -> {log_type}=({rx:.2f}, {ry:.2f}, {rz:.2f})cm")
+                logging.debug(f"[VisionBridge] 탐지 완료: '{det['name']}' -> {log_type}=({rx:.2f}, {ry:.2f}, {rz:.2f})cm")
 
                 refined_list.append({
                     "name": det["name"],
                     "position": {"x": round(rx, 2), "y": round(ry, 2), "z": round(rz, 2)},
+                    "pixel_center": det["pixel_center"],
                     "bbox": det["bbox"],
                     "sync_pose": captured_pose
                 })
                 
-        # 항상 튜플 (list, frame)을 반환하도록 보장
-        return refined_list, color_frame
+        # 항상 튜플 (list, color_frame, depth_frame)을 반환하도록 보장
+        return refined_list, color_frame, depth_frame
 
     # NOTE: 백그라운드 업데이트 루프는 PerceptionManager에서 통합 관리하므로
     # 이 클래스 내부의 중복된 루프 로직은 제거되었습니다.

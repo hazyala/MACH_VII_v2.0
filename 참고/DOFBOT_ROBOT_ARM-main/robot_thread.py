@@ -27,6 +27,7 @@ def run_robot_loop():
     while True:
         target_pos = None
         gripper_cmd = None
+        joint_cmd = None
         
         with shared.cmd_lock:
             if shared.command["target_pos"] is not None:
@@ -36,6 +37,10 @@ def run_robot_loop():
             if shared.command["gripper_cmd"] is not None:
                 gripper_cmd = shared.command["gripper_cmd"]
                 shared.command["gripper_cmd"] = None
+            
+            if shared.command["joint_cmd"] is not None:
+                joint_cmd = shared.command["joint_cmd"]
+                shared.command["joint_cmd"] = None
 
         if gripper_cmd is not None:
             try:
@@ -45,6 +50,17 @@ def run_robot_loop():
                 
             except Exception as e:
                 print(f"Gripper Error: {e}")
+        
+        if joint_cmd is not None:
+            try:
+                if isinstance(joint_cmd, list) and len(joint_cmd) == 5:
+                    joints = [float(j) for j in joint_cmd]
+                    print(f"Joint Command: {joints}")
+                    bot.set_joints_direct(joints, duration_ms=1000)
+                else:
+                    print(f"Invalid Joint Command: {joint_cmd}")
+            except Exception as e:
+                print(f"Joint Error: {e}")
 
         if target_pos is not None:
             try:

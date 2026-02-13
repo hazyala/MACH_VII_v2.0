@@ -132,7 +132,9 @@ class SystemPipeline:
             },
             strategy=strategy_manager.get_context().copy(), # 복사본 사용
             last_frame=system_state.last_frame_base64,
-            last_ee_frame=system_state.last_ee_frame_base64
+            last_depth=system_state.last_depth_base64, # [New]
+            last_ee_frame=system_state.last_ee_frame_base64,
+            last_ee_depth=system_state.last_ee_depth_base64 # [New]
         )
         
         return snapshot.dict()
