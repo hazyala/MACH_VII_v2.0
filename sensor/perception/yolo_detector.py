@@ -18,9 +18,9 @@ class YoloDetector:
             model_path: 사용할 YOLO 모델 파일 경로 (.pt)
             conf_threshold: 탐지 신뢰도 임계값 (기본 0.4)
         """
-        # 1. 모델 경로 설정 (기본값: YOLOv11x - 정확도 최우선 모델)
+        # 1. 모델 경로 설정 (기본값: yolo11s_custom.pt - 커스텀 모델)
         if model_path is None:
-            model_path = str(PathConfig.MODEL_DIR / "yolo11x.pt")
+            model_path = str(PathConfig.MODEL_DIR / "yolo11s_custom.pt")
             
         self.conf_threshold = conf_threshold
             
@@ -32,7 +32,7 @@ class YoloDetector:
         try:
             # 3. 모델 로드 및 최적화
             self.model = YOLO(model_path).to(self.device)
-            logging.info(f"[YoloDetector] YOLOv11x 모델 로딩 성공 - 연산 가동 준비 완료")
+            logging.info(f"[YoloDetector] yolo11s_custom 모델 로딩 성공 - 연산 가동 준비 완료")
         except Exception as e:
             logging.error(f"[YoloDetector] 모델 로딩 실패: {e}")
             raise RuntimeError(f"YOLO 모델을 로드할 수 없습니다: {model_path}")
